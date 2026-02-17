@@ -37,7 +37,9 @@ There are only two things: **components** and **compose**.
 
 A **component** is a typed function from inputs to an output. If the output is a `ReactElement`, it renders UI. If the output is a `number`, `string`, `object`, etc., it's a data source. There is no separate "provider" concept — everything is a component.
 
-A **source** is a component with no inputs that pushes values over time — a WebSocket, a timer, a browser API. It's the only way to introduce reactivity. Everything downstream re-runs automatically when a source emits.
+A **source** is a component with no inputs that pushes values over time — a WebSocket, a timer, a browser API. It's one way to introduce reactivity. Everything downstream re-runs automatically when a source emits.
+
+**`state`** is a global mutable cell. It returns a `[Component, setter]` tuple. The component behaves like a source (no inputs, emits values), and the setter can be called from anywhere — event handlers, outside the graph, wherever. New subscribers receive the current value immediately.
 
 **`compose({ into, from, key })`** wires `from`'s output into `into`'s input named `key`. Returns a new component whose inputs are `into`'s remaining inputs plus `from`'s inputs.
 
@@ -224,6 +226,39 @@ const GeoLocation = source({
 ```
 
 When a source emits a new value, every downstream component that depends on it re-runs automatically. Cleanup is called when the React component unmounts.
+
+### `state({ schema, initial })`
+
+Create a global mutable state cell. Returns a `[Component, setter]` tuple.
+
+```tsx
+import { z } from "zod/v4";
+import { state, component, compose, toReact, View } from "graft";
+
+const [CurrentUser, setCurrentUser] = state({
+  schema: z.string(),
+  initial: "anonymous",
+});
+
+const Greeting = component({
+  input: z.object({ name: z.string() }),
+  output: View,
+  run: ({ name }) => <h1>Hello, {name}</h1>,
+});
+
+const App = toReact(
+  compose({ into: Greeting, from: CurrentUser, key: "name" }),
+);
+
+// Renders: <h1>Hello, anonymous</h1>
+// Then call from anywhere:
+setCurrentUser("Alice");
+// Re-renders: <h1>Hello, Alice</h1>
+```
+
+The component behaves like a source — no inputs, emits values, works with `compose`. The setter is a plain function you can call from event handlers, callbacks, or anywhere else. New subscribers immediately receive the current value, so they never start empty.
+
+Note: `state` is global — all instances share the same value. For instance-local state (e.g., per-component form input), that's a separate problem.
 
 ### `View`
 

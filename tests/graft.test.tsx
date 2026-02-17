@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import React, { act } from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, compose, source, toReact, View } from "../src/index.js";
+import { component, compose, source, state, toReact, View } from "../src/index.js";
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
@@ -594,5 +594,184 @@ describe("reactive compose", () => {
 
     const val = Number(screen.getByTestId("ticker").textContent);
     assert.ok(val >= 1, `Expected at least 1 tick, got ${val}`);
+  });
+});
+
+describe("state", () => {
+  it("creates a state with correct tag and empty schema", () => {
+    const [Value, _setValue] = state({
+      schema: z.number(),
+      initial: 0,
+    });
+    assert.equal(Value._tag, "graft-component");
+    assert.deepEqual(Object.keys(Value.schema.shape), []);
+  });
+
+  it("subscriber receives initial value immediately", () => {
+    const [Value, _setValue] = state({
+      schema: z.string(),
+      initial: "hello",
+    });
+
+    const values: string[] = [];
+    const cleanup = Value.subscribe({}, (v) => { values.push(v); });
+    assert.deepEqual(values, ["hello"]);
+    cleanup();
+  });
+
+  it("setter triggers re-emission to all subscribers", () => {
+    const [Value, setValue] = state({
+      schema: z.number(),
+      initial: 0,
+    });
+
+    const values1: number[] = [];
+    const values2: number[] = [];
+    const c1 = Value.subscribe({}, (v) => { values1.push(v); });
+    const c2 = Value.subscribe({}, (v) => { values2.push(v); });
+
+    assert.deepEqual(values1, [0]);
+    assert.deepEqual(values2, [0]);
+
+    setValue(10);
+    assert.deepEqual(values1, [0, 10]);
+    assert.deepEqual(values2, [0, 10]);
+
+    setValue(20);
+    assert.deepEqual(values1, [0, 10, 20]);
+    assert.deepEqual(values2, [0, 10, 20]);
+
+    c1();
+    c2();
+  });
+
+  it("cleanup unsubscribes — no further emissions", () => {
+    const [Value, setValue] = state({
+      schema: z.number(),
+      initial: 0,
+    });
+
+    const values: number[] = [];
+    const cleanup = Value.subscribe({}, (v) => { values.push(v); });
+    assert.deepEqual(values, [0]);
+
+    cleanup();
+    setValue(42);
+    // Should NOT receive 42
+    assert.deepEqual(values, [0]);
+  });
+
+  it("new subscriber gets current value (not initial)", () => {
+    const [Value, setValue] = state({
+      schema: z.string(),
+      initial: "first",
+    });
+
+    setValue("second");
+    setValue("third");
+
+    const values: string[] = [];
+    const cleanup = Value.subscribe({}, (v) => { values.push(v); });
+    assert.deepEqual(values, ["third"]);
+    cleanup();
+  });
+
+  it("compose with state: state feeds into a data component", () => {
+    const [Count, setCount] = state({
+      schema: z.number(),
+      initial: 5,
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const Composed = compose({ into: Double, from: Count, key: "n" });
+
+    const values: number[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+    assert.deepEqual(values, [10]); // 5 * 2
+
+    setCount(7);
+    assert.deepEqual(values, [10, 14]); // 7 * 2
+
+    cleanup();
+  });
+
+  it("compose with state into a View and render via toReact", async () => {
+    const [Label, setLabel] = state({
+      schema: z.string(),
+      initial: "initial",
+    });
+
+    const Display = component({
+      input: z.object({ text: z.string() }),
+      output: View,
+      run: ({ text }) => <div data-testid="state-view">{text}</div>,
+    });
+
+    const Composed = compose({ into: Display, from: Label, key: "text" });
+    const App = toReact(Composed);
+
+    render(<App />);
+
+    const el = await screen.findByTestId("state-view");
+    assert.equal(el.textContent, "initial");
+
+    act(() => { setLabel("updated"); });
+    assert.equal(screen.getByTestId("state-view").textContent, "updated");
+
+    act(() => { setLabel("final"); });
+    assert.equal(screen.getByTestId("state-view").textContent, "final");
+  });
+
+  it("state in a three-level chain: state → data → data → view", async () => {
+    const [Num, setNum] = state({
+      schema: z.number(),
+      initial: 3,
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const ToString = component({
+      input: z.object({ value: z.number() }),
+      output: z.string(),
+      run: ({ value }) => `val:${value}`,
+    });
+
+    const Show = component({
+      input: z.object({ msg: z.string() }),
+      output: View,
+      run: ({ msg }) => <span data-testid="state-chain">{msg}</span>,
+    });
+
+    const Step1 = compose({ into: Double, from: Num, key: "n" });
+    const Step2 = compose({ into: ToString, from: Step1, key: "value" });
+    const Step3 = compose({ into: Show, from: Step2, key: "msg" });
+    const App = toReact(Step3);
+
+    render(<App />);
+    const el = await screen.findByTestId("state-chain");
+    assert.equal(el.textContent, "val:6"); // 3 * 2
+
+    act(() => { setNum(10); });
+    assert.equal(screen.getByTestId("state-chain").textContent, "val:20"); // 10 * 2
+  });
+
+  it("run returns current value", () => {
+    const [Value, setValue] = state({
+      schema: z.number(),
+      initial: 42,
+    });
+    assert.equal(Value.run({}), 42);
+
+    setValue(99);
+    assert.equal(Value.run({}), 99);
   });
 });
