@@ -541,6 +541,17 @@ The `run()` function is unaffected — it returns the raw `Promise` that rejects
 
 **Note:** `state()` never produces sentinels. It always has a value (the initial value), and the setter updates it synchronously. This is by design — state is always "ready".
 
+## Deduplication
+
+`compose` deduplicates emissions from `from` using reference equality (`===`). When `from` emits the same value it emitted last time, the re-subscription to `into` is skipped entirely — `into`'s `run` is never called, and no value propagates downstream.
+
+This means:
+- A source spamming the same primitive (e.g., a timer re-emitting `0`) doesn't cause unnecessary work.
+- Calling a state setter with the current value is a no-op for downstream subscribers.
+- Consecutive `GraftLoading` sentinels are collapsed into one.
+
+Reference equality is intentional. Two different objects with identical content (`{ x: 1 } !== { x: 1 }`) are *not* deduped — this matches React's behavior and avoids the cost and surprises of deep comparison.
+
 ## How it works
 
 Graft is a runtime library, not a compiler plugin. `compose()` is a regular function call that:

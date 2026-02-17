@@ -2,6 +2,9 @@ import React, { type ReactElement, useState, useEffect } from "react";
 import { z } from "zod/v4";
 import { GraftLoading, isSentinel, type Cleanup, type GraftError, type GraftComponent, type MaybePromise } from "./types.js";
 
+/** Sentinel for "no previous value" in deduplication logic. */
+const UNSET: unique symbol = Symbol("UNSET");
+
 function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
   return (
     value !== null &&
@@ -107,10 +110,18 @@ export function compose<
     let intoCleanup: Cleanup | null = null;
     let disposed = false;
 
+    // Deduplication: skip re-subscription when from emits the same value.
+    let lastFromValue: OB | typeof GraftLoading | GraftError | typeof UNSET = UNSET;
+
     const fromCleanup = from.subscribe(
       fromInput as z.infer<SB>,
       (fromValue: OB | typeof GraftLoading | GraftError) => {
         if (disposed) return;
+
+        // Reference equality dedup — skip if same value as last time.
+        if (fromValue === lastFromValue) return;
+        lastFromValue = fromValue;
+
         // Tear down previous into subscription
         if (intoCleanup) intoCleanup();
         intoCleanup = null;

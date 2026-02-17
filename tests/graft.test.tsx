@@ -1199,6 +1199,318 @@ describe("GraftLoading", () => {
   });
 });
 
+describe("deduplication", () => {
+  it("source emitting same primitive value twice → into's run called only once", () => {
+    let emitter: ((v: number) => void) | null = null;
+    let runCount = 0;
+
+    const Src = source({
+      output: z.number(),
+      run: (emit) => {
+        emitter = emit;
+        emit(10);
+        return () => {};
+      },
+    });
+
+    const Transform = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => { runCount++; return n * 2; },
+    });
+
+    const Composed = compose({ into: Transform, from: Src, key: "n" });
+
+    const values: number[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [20]);
+
+    // Emit same value again — should be deduped
+    emitter!(10);
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [20]);
+
+    // Emit same value a third time — still deduped
+    emitter!(10);
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [20]);
+
+    cleanup();
+  });
+
+  it("state setter called with same value → downstream does not re-run", () => {
+    const [Value, setValue] = state({
+      schema: z.number(),
+      initial: 5,
+    });
+
+    let runCount = 0;
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => { runCount++; return n * 2; },
+    });
+
+    const Composed = compose({ into: Double, from: Value, key: "n" });
+
+    const values: number[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [10]);
+
+    // Set same value — should be deduped
+    setValue(5);
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [10]);
+
+    // Set different value — should propagate
+    setValue(7);
+    assert.equal(runCount, 2);
+    assert.deepEqual(values, [10, 14]);
+
+    cleanup();
+  });
+
+  it("source emitting different values → all propagate (no false dedup)", () => {
+    let emitter: ((v: number) => void) | null = null;
+
+    const Src = source({
+      output: z.number(),
+      run: (emit) => {
+        emitter = emit;
+        emit(1);
+        return () => {};
+      },
+    });
+
+    const Identity = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n,
+    });
+
+    const Composed = compose({ into: Identity, from: Src, key: "n" });
+
+    const values: number[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+
+    assert.deepEqual(values, [1]);
+
+    emitter!(2);
+    emitter!(3);
+    emitter!(4);
+    assert.deepEqual(values, [1, 2, 3, 4]);
+
+    cleanup();
+  });
+
+  it("object reference equality: same ref deduped, different objects with same content NOT deduped", () => {
+    let emitter: ((v: { x: number }) => void) | null = null;
+
+    const Src = source({
+      output: z.object({ x: z.number() }),
+      run: (emit) => {
+        emitter = emit;
+        return () => {};
+      },
+    });
+
+    let runCount = 0;
+
+    const Reader = component({
+      input: z.object({ obj: z.object({ x: z.number() }) }),
+      output: z.number(),
+      run: ({ obj }) => { runCount++; return obj.x; },
+    });
+
+    const Composed = compose({ into: Reader, from: Src, key: "obj" });
+
+    const values: number[] = [];
+    const cleanup = Composed.subscribe({}, (v) => {
+      if (typeof v === "number") values.push(v);
+    });
+
+    // Nothing emitted yet (no sync emit), so GraftLoading
+    assert.equal(runCount, 0);
+
+    const obj1 = { x: 42 };
+    emitter!(obj1);
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [42]);
+
+    // Same reference — should be deduped
+    emitter!(obj1);
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [42]);
+
+    // Different object with same content — NOT deduped (=== fails)
+    emitter!({ x: 42 });
+    assert.equal(runCount, 2);
+    assert.deepEqual(values, [42, 42]);
+
+    cleanup();
+  });
+
+  it("consecutive GraftLoading emissions are deduped", async () => {
+    // Two async components composed: both emit GraftLoading, but compose
+    // should dedup the consecutive GraftLoading sentinels from the inner chain.
+    const AsyncNum = component({
+      input: z.object({}),
+      output: z.number(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return 42;
+      },
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const Composed = compose({ into: Double, from: AsyncNum, key: "n" });
+
+    const values: unknown[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+
+    // Should get exactly one GraftLoading, not two
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+
+    // Wait for resolution
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(values.length, 2);
+    assert.equal(values[1], 84); // 42 * 2
+
+    cleanup();
+  });
+
+  it("GraftLoading then real value is NOT deduped (different values)", async () => {
+    const AsyncNum = component({
+      input: z.object({}),
+      output: z.number(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return 7;
+      },
+    });
+
+    const values: unknown[] = [];
+    const cleanup = AsyncNum.subscribe({}, (v) => { values.push(v); });
+
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(values.length, 2);
+    assert.equal(values[1], 7);
+
+    cleanup();
+  });
+
+  it("multi-level dedup: three-level chain, source spam → only distinct values reach view", () => {
+    let emitter: ((v: number) => void) | null = null;
+
+    const Src = source({
+      output: z.number(),
+      run: (emit) => {
+        emitter = emit;
+        emit(1);
+        return () => {};
+      },
+    });
+
+    let doubleCount = 0;
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => { doubleCount++; return n * 2; },
+    });
+
+    let toStringCount = 0;
+    const ToString = component({
+      input: z.object({ value: z.number() }),
+      output: z.string(),
+      run: ({ value }) => { toStringCount++; return `v:${value}`; },
+    });
+
+    const Step1 = compose({ into: Double, from: Src, key: "n" });
+    const Step2 = compose({ into: ToString, from: Step1, key: "value" });
+
+    const values: string[] = [];
+    const cleanup = Step2.subscribe({}, (v) => { values.push(v as string); });
+
+    assert.deepEqual(values, ["v:2"]);
+    assert.equal(doubleCount, 1);
+    assert.equal(toStringCount, 1);
+
+    // Spam same value — nothing should propagate
+    emitter!(1);
+    emitter!(1);
+    emitter!(1);
+    assert.deepEqual(values, ["v:2"]);
+    assert.equal(doubleCount, 1);
+    assert.equal(toStringCount, 1);
+
+    // New value — should propagate through entire chain
+    emitter!(5);
+    assert.deepEqual(values, ["v:2", "v:10"]);
+    assert.equal(doubleCount, 2);
+    assert.equal(toStringCount, 2);
+
+    // Spam the new value — nothing
+    emitter!(5);
+    assert.deepEqual(values, ["v:2", "v:10"]);
+    assert.equal(doubleCount, 2);
+    assert.equal(toStringCount, 2);
+
+    cleanup();
+  });
+
+  it("dedup works with toReact — same source value does not cause re-render", async () => {
+    let emitter: ((v: string) => void) | null = null;
+    let renderCount = 0;
+
+    const Src = source({
+      output: z.string(),
+      run: (emit) => {
+        emitter = emit;
+        emit("hello");
+        return () => {};
+      },
+    });
+
+    const Display = component({
+      input: z.object({ text: z.string() }),
+      output: View,
+      run: ({ text }) => { renderCount++; return <div data-testid="dedup-react">{text}</div>; },
+    });
+
+    const Composed = compose({ into: Display, from: Src, key: "text" });
+    const App = toReact(Composed);
+
+    render(<App />);
+    const el = await screen.findByTestId("dedup-react");
+    assert.equal(el.textContent, "hello");
+    const initialRenderCount = renderCount;
+
+    // Emit same value — should NOT trigger re-render
+    act(() => { emitter!("hello"); });
+    assert.equal(renderCount, initialRenderCount);
+    assert.equal(screen.getByTestId("dedup-react").textContent, "hello");
+
+    // Emit different value — should trigger re-render
+    act(() => { emitter!("world"); });
+    assert.equal(renderCount, initialRenderCount + 1);
+    assert.equal(screen.getByTestId("dedup-react").textContent, "world");
+  });
+});
+
 describe("GraftError", () => {
   it("async component rejection produces GraftError via subscribe", async () => {
     const Failing = component({
