@@ -4,14 +4,14 @@ import assert from "node:assert/strict";
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, compose, toReact, ReactOutput } from "../src/index.js";
+import { component, compose, toReact, View } from "../src/index.js";
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
     const schema = z.object({ name: z.string() });
     const gc = component({
       input: schema,
-      output: ReactOutput,
+      output: View,
       run: (props) => <div>{props.name}</div>,
     });
     assert.equal(gc._tag, "graft-component");
@@ -21,7 +21,7 @@ describe("component", () => {
   it("run returns a ReactElement", () => {
     const gc = component({
       input: z.object({ x: z.number() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => <span>{props.x}</span>,
     });
     const el = gc.run({ x: 42 });
@@ -43,7 +43,7 @@ describe("compose", () => {
   it("wires data component output into visual component prop", () => {
     const Display = component({
       input: z.object({ label: z.string(), sum: z.number() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => (
         <div>
           {props.label}: {props.sum}
@@ -71,7 +71,7 @@ describe("compose", () => {
   it("composed component renders correctly via toReact", () => {
     const Display = component({
       input: z.object({ label: z.string(), sum: z.number() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => (
         <span data-testid="result">
           {props.label}: {props.sum}
@@ -96,7 +96,7 @@ describe("compose", () => {
   it("throws at runtime if a required prop is missing", () => {
     const Display = component({
       input: z.object({ value: z.string() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => <div>{props.value}</div>,
     });
 
@@ -117,7 +117,7 @@ describe("compose", () => {
   it("chained compose works (three-level composition)", () => {
     const C = component({
       input: z.object({ msg: z.string() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => <p data-testid="msg">{props.msg}</p>,
     });
 
@@ -157,7 +157,7 @@ describe("compose", () => {
   it("handles shared parameter names between components", () => {
     const A = component({
       input: z.object({ x: z.string(), result: z.number() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => (
         <span data-testid="out">
           {props.x}-{props.result}
@@ -183,7 +183,7 @@ describe("toReact", () => {
   it("converts a component to React.FC", () => {
     const gc = component({
       input: z.object({ who: z.string() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => <h1 data-testid="hello">Hello {props.who}</h1>,
     });
 
@@ -195,7 +195,7 @@ describe("toReact", () => {
   it("validates props and throws on invalid input", () => {
     const gc = component({
       input: z.object({ count: z.number() }),
-      output: ReactOutput,
+      output: View,
       run: (props) => <span>{props.count}</span>,
     });
 

@@ -30,12 +30,12 @@ When you're done composing, **`toReact`** converts the result into a regular `Re
 
 ```tsx
 import { z } from "zod/v4";
-import { component, compose, toReact, ReactOutput } from "graft";
+import { component, compose, toReact, View } from "graft";
 
 // A visual component that displays a greeting
 const Greeting = component({
   input: z.object({ message: z.string() }),
-  output: ReactOutput,
+  output: View,
   run: ({ message }) => <h1>{message}</h1>,
 });
 
@@ -65,7 +65,7 @@ Define a component from a zod input schema, a zod output schema, and a function.
 
 ```tsx
 import { z } from "zod/v4";
-import { component, ReactOutput } from "graft";
+import { component, View } from "graft";
 
 // A visual component (output is ReactElement)
 const UserCard = component({
@@ -74,7 +74,7 @@ const UserCard = component({
     email: z.string(),
     age: z.number(),
   }),
-  output: ReactOutput,
+  output: View,
   run: ({ name, email, age }) => (
     <div>
       <h2>{name}</h2>
@@ -92,7 +92,7 @@ const FetchAge = component({
 });
 ```
 
-The input schema is the source of truth for both TypeScript types and runtime validation. The output schema declares the type of value the component produces. Use `ReactOutput` for components that return JSX.
+The input schema is the source of truth for both TypeScript types and runtime validation. The output schema declares the type of value the component produces. Use `View` for components that return JSX.
 
 ### `compose({ into, from, key })`
 
@@ -123,16 +123,16 @@ const UserCardReact = toReact(UserCardWithAge);
 <UserCardReact name="Alice" email="alice@example.com" userId="u123" />
 ```
 
-### `ReactOutput`
+### `View`
 
 A pre-built zod schema for `ReactElement` output. Use it as the `output` for any component that returns JSX.
 
 ```tsx
-import { ReactOutput } from "graft";
+import { View } from "graft";
 
 const MyComponent = component({
   input: z.object({ text: z.string() }),
-  output: ReactOutput,
+  output: View,
   run: ({ text }) => <p>{text}</p>,
 });
 ```
@@ -144,7 +144,7 @@ const MyComponent = component({
 ```tsx
 const Display = component({
   input: z.object({ msg: z.string() }),
-  output: ReactOutput,
+  output: View,
   run: ({ msg }) => <p>{msg}</p>,
 });
 
@@ -190,7 +190,7 @@ const ProfilePage = component({
     postCount: z.number(),
     avatarUrl: z.string(),
   }),
-  output: ReactOutput,
+  output: View,
   run: ({ name, email, postCount, avatarUrl }) => (
     <div>
       <img src={avatarUrl} alt={name} />
@@ -264,7 +264,7 @@ Every input is validated at runtime using the zod schemas you defined. If an inp
 const App = toReact(
   component({
     input: z.object({ count: z.number() }),
-    output: ReactOutput,
+    output: View,
     run: ({ count }) => <span>{count}</span>,
   }),
 );

@@ -20,6 +20,6 @@ export interface GraftComponent<
 }
 
 /** Output schema for components that return JSX. */
-export const ReactOutput: z.ZodType<ReactElement> = z.custom<ReactElement>(
+export const View: z.ZodType<ReactElement> = z.custom<ReactElement>(
   () => true,
 );
