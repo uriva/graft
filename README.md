@@ -1,20 +1,24 @@
 ```
-                    ╭─── View ───╮
-                    │  PriceCard  │
-                    ╰─┬────────┬─╯
-               header ▲        ▲ displayPrice
-            ╭─────────┴─╮   ╭──┴──────────╮
-            │   Header   │   │ FormatPrice  │
-            ╰─────┬──────╯   ╰──────┬──────╯
-              name ▲            price ▲
-          ╭────────┴───╮    ╭────────┴───╮
-          │  CoinName   │    │  PriceFeed  │
-          ╰──────┬─────╯    ╰────────────╯
-          coinId ▲              (source)
-                 │
-            props from caller
-                 │
-          <App coinId="bitcoin" />
+                         _    __  _
+   __ _  _ _  __ _  ___ | |_ / _|| |_
+  / _` || '_|/ _` ||___||  _||  _||  _|
+  \__, ||_|  \__,_|      \__||_|   \__|
+  |___/
+```
+
+*The smallest API imaginable.*
+
+```mermaid
+graph BT
+    App["&lt;App coinId=&quot;bitcoin&quot; /&gt;"] -- coinId --> CoinName
+    CoinName -- name --> Header
+    Header -- header --> PriceCard
+    PriceFeed -- price --> FormatPrice
+    FormatPrice -- displayPrice --> PriceCard
+    PriceCard -- View --> Output((" "))
+
+    style PriceFeed fill:#58a6ff,stroke:#58a6ff,color:#0d1117
+    style Output fill:none,stroke:none
 ```
 
 # graft
