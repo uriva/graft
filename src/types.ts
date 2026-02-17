@@ -1,3 +1,4 @@
+import { type ReactElement } from "react";
 import { z } from "zod/v4";
 
 /**
@@ -17,3 +18,8 @@ export interface GraftComponent<
   readonly outputSchema: z.ZodType<O>;
   readonly run: (props: z.infer<S>) => O;
 }
+
+/** Output schema for components that return JSX. */
+export const ReactOutput: z.ZodType<ReactElement> = z.custom<ReactElement>(
+  () => true,
+);

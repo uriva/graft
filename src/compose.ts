@@ -3,14 +3,14 @@ import { z } from "zod/v4";
 import type { GraftComponent } from "./types.js";
 
 /**
- * compose(A, B, key):
- *   - A is a component with inputs SA that produces OA
- *   - B is a component with inputs SB that produces OB
- *   - key is an input name of A whose type matches OB
+ * compose({ into, from, key }):
+ *   - into: a component with inputs SA that produces OA
+ *   - from: a component with inputs SB that produces OB
+ *   - key: an input name of `into` whose type matches OB
  *   - Result: a component whose inputs are SA minus key, plus SB,
  *     and whose output is OA
  *
- * B's output feeds into A[key], remaining params bubble up.
+ * `from`'s output feeds into `into[key]`, remaining params bubble up.
  */
 export function compose<
   SA extends z.ZodObject<z.ZodRawShape>,
@@ -18,18 +18,18 @@ export function compose<
   K extends string & keyof z.infer<SA>,
   OA,
   OB,
->(
-  a: GraftComponent<SA, OA>,
-  b: GraftComponent<SB, OB>,
-  key: K,
-): GraftComponent<
+>({ into, from, key }: {
+  into: GraftComponent<SA, OA>;
+  from: GraftComponent<SB, OB>;
+  key: K;
+}): GraftComponent<
   z.ZodObject<Omit<SA["shape"], K> & SB["shape"]>,
   OA
 > {
-  // Build the new schema: A's shape minus key, plus B's shape
-  const aShape = { ...a.schema.shape };
-  delete (aShape as Record<string, unknown>)[key];
-  const newShape = { ...aShape, ...b.schema.shape };
+  // Build the new schema: into's shape minus key, plus from's shape
+  const intoShape = { ...into.schema.shape };
+  delete (intoShape as Record<string, unknown>)[key];
+  const newShape = { ...intoShape, ...from.schema.shape };
   const newSchema = z.object(newShape) as z.ZodObject<
     Omit<SA["shape"], K> & SB["shape"]
   >;
@@ -38,29 +38,29 @@ export function compose<
     // Validate all incoming props at runtime
     const parsed = newSchema.parse(props) as Record<string, unknown>;
 
-    // Split: B's inputs from the combined props
-    const bInput: Record<string, unknown> = {};
-    for (const bKey of Object.keys(b.schema.shape)) {
-      bInput[bKey] = parsed[bKey];
+    // Split: from's inputs from the combined props
+    const fromInput: Record<string, unknown> = {};
+    for (const fromKey of Object.keys(from.schema.shape)) {
+      fromInput[fromKey] = parsed[fromKey];
     }
 
-    // Run B to get the value for key
-    const bOutput = b.run(bInput as z.infer<SB>);
+    // Run from to get the value for key
+    const fromOutput = from.run(fromInput as z.infer<SB>);
 
-    // Assemble A's full inputs: everything except B-only keys, plus key=bOutput
-    const aInput: Record<string, unknown> = { [key]: bOutput };
-    for (const aKey of Object.keys(a.schema.shape)) {
-      if (aKey === key) continue;
-      if (aKey in parsed) aInput[aKey] = parsed[aKey];
+    // Assemble into's full inputs: everything except from-only keys, plus key=fromOutput
+    const intoInput: Record<string, unknown> = { [key]: fromOutput };
+    for (const intoKey of Object.keys(into.schema.shape)) {
+      if (intoKey === key) continue;
+      if (intoKey in parsed) intoInput[intoKey] = parsed[intoKey];
     }
 
-    return a.run(aInput as z.infer<SA>);
+    return into.run(intoInput as z.infer<SA>);
   };
 
   return {
     _tag: "graft-component",
     schema: newSchema,
-    outputSchema: a.outputSchema,
+    outputSchema: into.outputSchema,
     run,
   };
 }

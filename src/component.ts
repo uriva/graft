@@ -11,10 +11,10 @@ import type { GraftComponent } from "./types.js";
 export function component<
   S extends z.ZodObject<z.ZodRawShape>,
   O,
->(
-  schema: S,
-  outputSchema: z.ZodType<O>,
-  run: (props: z.infer<S>) => O,
-): GraftComponent<S, O> {
-  return { _tag: "graft-component", schema, outputSchema, run };
+>({ input, output, run }: {
+  input: S;
+  output: z.ZodType<O>;
+  run: (props: z.infer<S>) => O;
+}): GraftComponent<S, O> {
+  return { _tag: "graft-component", schema: input, outputSchema: output, run };
 }
