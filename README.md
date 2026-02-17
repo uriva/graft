@@ -1,25 +1,15 @@
 ```
-                         _    __  _
-   __ _  _ _  __ _  ___ | |_ / _|| |_
-  / _` || '_|/ _` ||___||  _||  _||  _|
-  \__, ||_|  \__,_|      \__||_|   \__|
-  |___/
+                                 ▄▄▄▄            
+                                 ██▀▀▀     ██     
+  ▄███▄██   ██▄████   ▄█████▄  ███████   ███████  
+ ██▀  ▀██   ██▀       ▀ ▄▄▄██    ██        ██     
+ ██    ██   ██       ▄██▀▀▀██    ██        ██     
+ ▀██▄▄███   ██       ██▄▄▄███    ██        ██▄▄▄  
+  ▄▀▀▀ ██   ▀▀        ▀▀▀▀ ▀▀    ▀▀         ▀▀▀▀  
+  ▀████▀▀ 
 ```
 
 *The smallest API imaginable.*
-
-```mermaid
-graph BT
-    App["&lt;App coinId=&quot;bitcoin&quot; /&gt;"] -- coinId --> CoinName
-    CoinName -- name --> Header
-    Header -- header --> PriceCard
-    PriceFeed -- price --> FormatPrice
-    FormatPrice -- displayPrice --> PriceCard
-    PriceCard -- View --> Output((" "))
-
-    style PriceFeed fill:#58a6ff,stroke:#58a6ff,color:#0d1117
-    style Output fill:none,stroke:none
-```
 
 # graft
 
@@ -54,6 +44,18 @@ When you're done composing, **`toReact`** converts the result into a regular `Re
 ## Quick example
 
 A live crypto price card. The price streams over Binance's public WebSocket, the coin name is fetched async from CoinGecko, and a header embeds as a child View inside the card layout. All real, no API keys.
+
+```mermaid
+graph BT
+    App["&lt;App coinId=&quot;bitcoin&quot; /&gt;"] -- coinId --> CoinName
+    CoinName -- name --> Header
+    Header -- header --> PriceCard
+    PriceFeed -- price --> FormatPrice
+    FormatPrice -- displayPrice --> PriceCard
+    PriceCard -- View --> Output((" "))
+
+    style Output fill:none,stroke:none
+```
 
 ```tsx
 import { z } from "zod/v4";
