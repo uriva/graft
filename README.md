@@ -29,6 +29,8 @@ React components are functions with named parameters (props). When you build a U
 
 Graft lets you describe the wiring directly. You say *what* feeds into *what*, and the library builds the component for you. The unsatisfied inputs become the new component's props. This is [graph programming](https://uriva.github.io/blog/graph-programming.html) applied to React.
 
+Graft drastically reduces the tokens needed to construct something, and drastically reduces the number of possible bugs.
+
 ## Core concepts
 
 There are only two things: **components** and **compose**.
