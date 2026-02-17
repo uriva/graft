@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import type { Cleanup, GraftComponent } from "./types.js";
+import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from "./types.js";
 
 /**
  * Create a push-based data source with no inputs that emits values over time.
@@ -8,6 +8,8 @@ import type { Cleanup, GraftComponent } from "./types.js";
  * The `run` function receives an `emit` callback; call it whenever
  * you have a new value. Return a cleanup function to tear down
  * subscriptions / intervals / etc.
+ *
+ * Before the first emit(), subscribers receive GraftLoading.
  *
  * Example:
  *   const Clock = source({
@@ -24,8 +26,17 @@ export function source<O>({ output, run }: {
 }): GraftComponent<z.ZodObject<{}>, O> {
   const emptySchema = z.object({}) as z.ZodObject<{}>;
 
-  const subscribe = (_props: z.infer<typeof emptySchema>, cb: (value: O) => void): Cleanup => {
-    return run(cb);
+  const subscribe = (
+    _props: z.infer<typeof emptySchema>,
+    cb: (value: O | typeof GraftLoading | GraftError) => void,
+  ): Cleanup => {
+    let emitted = false;
+    const cleanup = run((value: O) => {
+      emitted = true;
+      cb(value);
+    });
+    if (!emitted) cb(GraftLoading);
+    return cleanup;
   };
 
   return {

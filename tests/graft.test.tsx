@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import React, { act } from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, compose, instantiate, source, state, toReact, View } from "../src/index.js";
+import { component, compose, GraftLoading, instantiate, isGraftError, source, state, toReact, View } from "../src/index.js";
+import { isSentinel, graftError } from "../src/types.js";
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
@@ -1009,5 +1010,359 @@ describe("instantiate", () => {
     act(() => { email.setValue("alice@test.com"); });
     assert.equal(screen.getByTestId("field-name").textContent, "Alice");
     assert.equal(screen.getByTestId("field-email").textContent, "alice@test.com");
+  });
+});
+
+describe("GraftLoading", () => {
+  it("async component subscribe emits GraftLoading then resolved value", async () => {
+    const Fetch = component({
+      input: z.object({ id: z.string() }),
+      output: z.number(),
+      run: async ({ id }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return id.length;
+      },
+    });
+
+    const values: unknown[] = [];
+    const cleanup = Fetch.subscribe({ id: "hello" }, (v) => { values.push(v); });
+
+    // GraftLoading emitted synchronously
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+
+    // Wait for resolution
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(values.length, 2);
+    assert.equal(values[1], 5);
+
+    cleanup();
+  });
+
+  it("sync component subscribe does NOT emit GraftLoading", () => {
+    const Add = component({
+      input: z.object({ a: z.number(), b: z.number() }),
+      output: z.number(),
+      run: ({ a, b }) => a + b,
+    });
+
+    const values: unknown[] = [];
+    const cleanup = Add.subscribe({ a: 3, b: 4 }, (v) => { values.push(v); });
+
+    // Only the result, no GraftLoading
+    assert.deepEqual(values, [7]);
+    cleanup();
+  });
+
+  it("source without sync emit produces GraftLoading first", () => {
+    const Delayed = source({
+      output: z.number(),
+      run: (emit) => {
+        // Does NOT call emit synchronously
+        const id = setTimeout(() => emit(42), 10);
+        return () => clearTimeout(id);
+      },
+    });
+
+    const values: unknown[] = [];
+    const cleanup = Delayed.subscribe({}, (v) => { values.push(v); });
+
+    // GraftLoading because no sync emit
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+
+    cleanup();
+  });
+
+  it("source with sync emit does NOT produce GraftLoading", () => {
+    const Immediate = source({
+      output: z.number(),
+      run: (emit) => {
+        emit(99);
+        return () => {};
+      },
+    });
+
+    const values: unknown[] = [];
+    const cleanup = Immediate.subscribe({}, (v) => { values.push(v); });
+
+    // Just the value, no GraftLoading
+    assert.deepEqual(values, [99]);
+    cleanup();
+  });
+
+  it("compose short-circuits on GraftLoading from async from", async () => {
+    const Display = component({
+      input: z.object({ value: z.number() }),
+      output: View,
+      run: ({ value }) => <span>{value}</span>,
+    });
+
+    const AsyncData = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: async ({ n }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return n * 2;
+      },
+    });
+
+    const Composed = compose({ into: Display, from: AsyncData, key: "value" });
+
+    const values: unknown[] = [];
+    const cleanup = Composed.subscribe({ n: 5 }, (v) => { values.push(v); });
+
+    // First emission is GraftLoading (short-circuit — Display.run was NOT called)
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+
+    // Wait for async resolution — now Display.run is called
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(values.length, 2);
+    // Second value is a ReactElement (from Display), not GraftLoading
+    assert.notEqual(values[1], GraftLoading);
+
+    cleanup();
+  });
+
+  it("toReact renders null for GraftLoading then updates when value arrives", async () => {
+    const Display = component({
+      input: z.object({ msg: z.string() }),
+      output: View,
+      run: ({ msg }) => <p data-testid="loading-test">{msg}</p>,
+    });
+
+    const AsyncMsg = component({
+      input: z.object({ text: z.string() }),
+      output: z.string(),
+      run: async ({ text }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return text.toUpperCase();
+      },
+    });
+
+    const Composed = compose({ into: Display, from: AsyncMsg, key: "msg" });
+    const App = toReact(Composed);
+
+    render(<App text="loading" />);
+
+    // Initially renders nothing (GraftLoading → null)
+    assert.equal(screen.queryByTestId("loading-test"), null);
+
+    // Once resolved, renders the value
+    const el = await screen.findByTestId("loading-test");
+    assert.equal(el.textContent, "LOADING");
+  });
+
+  it("multi-level GraftLoading propagation: async → data → view", async () => {
+    const AsyncNum = component({
+      input: z.object({}),
+      output: z.number(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return 42;
+      },
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const Show = component({
+      input: z.object({ value: z.number() }),
+      output: View,
+      run: ({ value }) => <span data-testid="multi-loading">{value}</span>,
+    });
+
+    const Step1 = compose({ into: Double, from: AsyncNum, key: "n" });
+    const Step2 = compose({ into: Show, from: Step1, key: "value" });
+    const App = toReact(Step2);
+
+    render(<App />);
+
+    // Initially null (GraftLoading propagates through entire chain)
+    assert.equal(screen.queryByTestId("multi-loading"), null);
+
+    // Eventually resolves: 42 * 2 = 84
+    const el = await screen.findByTestId("multi-loading");
+    assert.equal(el.textContent, "84");
+  });
+
+  it("isSentinel correctly identifies GraftLoading", () => {
+    assert.equal(isSentinel(GraftLoading), true);
+    assert.equal(isSentinel(42), false);
+    assert.equal(isSentinel(null), false);
+    assert.equal(isSentinel("hello"), false);
+    assert.equal(isSentinel(undefined), false);
+  });
+});
+
+describe("GraftError", () => {
+  it("async component rejection produces GraftError via subscribe", async () => {
+    const Failing = component({
+      input: z.object({}),
+      output: z.string(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        throw new Error("boom");
+      },
+    });
+
+    const values: unknown[] = [];
+    const cleanup = Failing.subscribe({}, (v) => { values.push(v); });
+
+    // GraftLoading first
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+
+    // Wait for rejection
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(values.length, 2);
+    assert.equal(isGraftError(values[1]), true);
+    assert.equal((values[1] as { error: unknown }).error instanceof Error, true);
+    assert.equal(((values[1] as { error: Error }).error).message, "boom");
+
+    cleanup();
+  });
+
+  it("compose short-circuits on GraftError", async () => {
+    const Display = component({
+      input: z.object({ data: z.string() }),
+      output: View,
+      run: ({ data }) => <span>{data}</span>,
+    });
+
+    const Failing = component({
+      input: z.object({}),
+      output: z.string(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        throw new Error("fetch failed");
+      },
+    });
+
+    const Composed = compose({ into: Display, from: Failing, key: "data" });
+
+    const values: unknown[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+
+    // GraftLoading first (short-circuited)
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+
+    // Then GraftError (short-circuited — Display.run was NOT called)
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(values.length, 2);
+    assert.equal(isGraftError(values[1]), true);
+
+    cleanup();
+  });
+
+  it("toReact renders null for GraftError", async () => {
+    const Display = component({
+      input: z.object({ data: z.string() }),
+      output: View,
+      run: ({ data }) => <span data-testid="error-test">{data}</span>,
+    });
+
+    const Failing = component({
+      input: z.object({}),
+      output: z.string(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        throw new Error("oops");
+      },
+    });
+
+    const Composed = compose({ into: Display, from: Failing, key: "data" });
+    const App = toReact(Composed);
+
+    render(<App />);
+
+    // GraftLoading → null
+    assert.equal(screen.queryByTestId("error-test"), null);
+
+    // Wait for error — still renders null (GraftError → null)
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(screen.queryByTestId("error-test"), null);
+  });
+
+  it("GraftError carries the original error object", () => {
+    const original = new TypeError("type mismatch");
+    const ge = graftError(original);
+    assert.equal(isGraftError(ge), true);
+    assert.equal(ge.error, original);
+  });
+
+  it("isGraftError rejects non-error values", () => {
+    assert.equal(isGraftError(42), false);
+    assert.equal(isGraftError("error"), false);
+    assert.equal(isGraftError(null), false);
+    assert.equal(isGraftError(undefined), false);
+    assert.equal(isGraftError({ _tag: "wrong" }), false);
+    assert.equal(isGraftError(GraftLoading), false);
+  });
+
+  it("isSentinel correctly identifies GraftError", () => {
+    const ge = graftError(new Error("test"));
+    assert.equal(isSentinel(ge), true);
+    assert.equal(isSentinel(GraftLoading), true);
+    assert.equal(isSentinel(42), false);
+  });
+
+  it("run() still throws on async rejection (subscribe gives GraftError)", async () => {
+    const Failing = component({
+      input: z.object({}),
+      output: z.string(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        throw new Error("run rejects");
+      },
+    });
+
+    // run() returns the raw promise — should reject normally
+    await assert.rejects(Failing.run({}) as Promise<unknown>, { message: "run rejects" });
+  });
+
+  it("multi-level GraftError propagation through compose chain", async () => {
+    const Failing = component({
+      input: z.object({}),
+      output: z.number(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        throw new Error("deep error");
+      },
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const Show = component({
+      input: z.object({ value: z.number() }),
+      output: View,
+      run: ({ value }) => <span data-testid="error-chain">{value}</span>,
+    });
+
+    const Step1 = compose({ into: Double, from: Failing, key: "n" });
+    const Step2 = compose({ into: Show, from: Step1, key: "value" });
+
+    const values: unknown[] = [];
+    const cleanup = Step2.subscribe({}, (v) => { values.push(v); });
+
+    // GraftLoading first
+    assert.equal(values[0], GraftLoading);
+
+    // Then GraftError (propagated through Double and Show without calling them)
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(values.length, 2);
+    assert.equal(isGraftError(values[1]), true);
+    assert.equal(((values[1] as { error: Error }).error).message, "deep error");
+
+    cleanup();
   });
 });

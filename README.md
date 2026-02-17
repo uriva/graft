@@ -343,6 +343,14 @@ const MyComponent = component({
 });
 ```
 
+### `GraftLoading`
+
+A unique symbol sentinel. Emitted by `subscribe()` when an async component or lazy source hasn't produced a value yet. See [Loading and error states](#loading-and-error-states).
+
+### `isGraftError(value)`
+
+Type guard that checks if a value is a `GraftError` sentinel. Returns `true` for error objects produced by async component rejections. See [Loading and error states](#loading-and-error-states).
+
 ## Chaining compositions
 
 `compose` returns a graft component, so you can compose again. Each step satisfies one more input, and the unsatisfied inputs keep bubbling up.
@@ -479,6 +487,59 @@ const App = toReact(
 <App count="not a number" />
 // ZodError: Invalid input: expected number, received string
 ```
+
+## Loading and error states
+
+When a component in a graph is async, the graph needs to handle the time before the value arrives and the case where it fails. Graft does this with two sentinel values that flow through the graph like regular data.
+
+### `GraftLoading`
+
+A unique symbol emitted by `subscribe()` when a value is not yet available:
+
+- **Async components** emit `GraftLoading` immediately, then the resolved value.
+- **Sources** that don't call `emit` synchronously in their `run` function emit `GraftLoading` until the first `emit`.
+- **Sync components** and **state** never emit `GraftLoading` — they always have a value immediately.
+
+When `compose` sees `GraftLoading` from `from`, it short-circuits — `into`'s `run` is **not** called, and `GraftLoading` is passed through to the outer subscriber. This means loading propagates through the entire chain automatically.
+
+`toReact` renders `null` for `GraftLoading`.
+
+### `GraftError`
+
+A branded object `{ _tag: Symbol("GraftError"), error: unknown }` that carries a caught error through the graph:
+
+- **Async components** that reject produce a `GraftError` containing the rejection reason.
+- Like `GraftLoading`, errors short-circuit through `compose` without calling downstream `run` functions.
+- `toReact` renders `null` for `GraftError`.
+
+```tsx
+import { GraftLoading, isGraftError } from "graft";
+
+const AsyncData = component({
+  input: z.object({ id: z.string() }),
+  output: z.number(),
+  run: async ({ id }) => {
+    const res = await fetch(`/api/data/${id}`);
+    if (!res.ok) throw new Error("fetch failed");
+    return (await res.json()).value;
+  },
+});
+
+// subscribe() lets you observe the full lifecycle:
+AsyncData.subscribe({ id: "123" }, (value) => {
+  if (value === GraftLoading) {
+    // Still loading...
+  } else if (isGraftError(value)) {
+    console.error("Error:", value.error);
+  } else {
+    console.log("Got value:", value);
+  }
+});
+```
+
+The `run()` function is unaffected — it returns the raw `Promise` that rejects normally. The sentinel system only applies to `subscribe()` and `toReact()`.
+
+**Note:** `state()` never produces sentinels. It always has a value (the initial value), and the setter updates it synchronously. This is by design — state is always "ready".
 
 ## How it works
 

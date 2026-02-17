@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import type { Cleanup, GraftComponent, MaybePromise } from "./types.js";
+import { GraftLoading, graftError, type Cleanup, type GraftError, type GraftComponent, type MaybePromise } from "./types.js";
 
 function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
   return (
@@ -24,11 +24,15 @@ export function component<
   output: z.ZodType<O>;
   run: (props: z.infer<S>) => MaybePromise<O>;
 }): GraftComponent<S, O> {
-  const subscribe = (props: z.infer<S>, cb: (value: O) => void): Cleanup => {
+  const subscribe = (props: z.infer<S>, cb: (value: O | typeof GraftLoading | GraftError) => void): Cleanup => {
     let cancelled = false;
     const result = run(props);
     if (isPromise(result)) {
-      result.then((v) => { if (!cancelled) cb(v); });
+      cb(GraftLoading);
+      result.then(
+        (v) => { if (!cancelled) cb(v); },
+        (err) => { if (!cancelled) cb(graftError(err)); },
+      );
     } else {
       cb(result);
     }

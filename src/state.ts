@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import type { Cleanup, GraftComponent } from "./types.js";
+import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from "./types.js";
 
 /**
  * Create a global mutable state cell.
@@ -22,7 +22,7 @@ export function state<O>({ schema, initial }: {
   initial: O;
 }): [GraftComponent<z.ZodObject<{}>, O>, (value: O) => void] {
   let current: O = initial;
-  const listeners = new Set<(value: O) => void>();
+  const listeners = new Set<(value: O | typeof GraftLoading | GraftError) => void>();
 
   const setter = (value: O) => {
     current = value;
@@ -33,7 +33,10 @@ export function state<O>({ schema, initial }: {
 
   const emptySchema = z.object({}) as z.ZodObject<{}>;
 
-  const subscribe = (_props: z.infer<typeof emptySchema>, cb: (value: O) => void): Cleanup => {
+  const subscribe = (
+    _props: z.infer<typeof emptySchema>,
+    cb: (value: O | typeof GraftLoading | GraftError) => void,
+  ): Cleanup => {
     listeners.add(cb);
     // Immediately emit the current value so subscribers don't start empty.
     cb(current);

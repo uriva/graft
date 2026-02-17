@@ -1,6 +1,6 @@
 import React, { type ReactElement, useState, useEffect } from "react";
 import { z } from "zod/v4";
-import type { Cleanup, GraftComponent, MaybePromise } from "./types.js";
+import { GraftLoading, isSentinel, type Cleanup, type GraftError, type GraftComponent, type MaybePromise } from "./types.js";
 
 function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
   return (
@@ -52,6 +52,10 @@ function splitProps<
  * subscribe() propagates reactivity: subscribes to `from`, and whenever
  * `from` emits, re-subscribes to `into` with the new value, forwarding
  * `into`'s emissions to the outer callback.
+ *
+ * If `from` emits GraftLoading or GraftError, compose short-circuits —
+ * it passes the sentinel directly to the outer callback without calling
+ * `into`'s run/subscribe.
  */
 export function compose<
   SA extends z.ZodObject<z.ZodRawShape>,
@@ -93,7 +97,7 @@ export function compose<
 
   const subscribe = (
     props: z.infer<typeof newSchema>,
-    cb: (value: OA) => void,
+    cb: (value: OA | typeof GraftLoading | GraftError) => void,
   ): Cleanup => {
     const parsed = newSchema.parse(props) as Record<string, unknown>;
     const { fromInput, buildIntoInput } = splitProps(parsed, into, from, key);
@@ -105,14 +109,22 @@ export function compose<
 
     const fromCleanup = from.subscribe(
       fromInput as z.infer<SB>,
-      (fromValue: OB) => {
+      (fromValue: OB | typeof GraftLoading | GraftError) => {
         if (disposed) return;
         // Tear down previous into subscription
         if (intoCleanup) intoCleanup();
+        intoCleanup = null;
+
+        // Short-circuit on sentinels — don't call into's run/subscribe
+        if (isSentinel(fromValue)) {
+          cb(fromValue);
+          return;
+        }
+
         // Subscribe to into with the new from value
         intoCleanup = into.subscribe(
           buildIntoInput(fromValue) as z.infer<SA>,
-          (intoValue: OA) => {
+          (intoValue: OA | typeof GraftLoading | GraftError) => {
             if (!disposed) cb(intoValue);
           },
         );
@@ -141,6 +153,8 @@ export function compose<
  *
  * Uses subscribe() internally so that reactive sources automatically
  * cause re-renders. For non-reactive graphs this fires once.
+ *
+ * GraftLoading and GraftError values are rendered as null.
  */
 export function toReact<S extends z.ZodObject<z.ZodRawShape>>(
   gc: GraftComponent<S, ReactElement>,
@@ -153,8 +167,13 @@ export function toReact<S extends z.ZodObject<z.ZodRawShape>>(
 
       const cleanup = gc.subscribe(
         gc.schema.parse(props),
-        (value: ReactElement) => {
-          if (!cancelled) setElement(value);
+        (value: ReactElement | typeof GraftLoading | GraftError) => {
+          if (cancelled) return;
+          if (isSentinel(value)) {
+            setElement(null);
+          } else {
+            setElement(value);
+          }
         },
       );
 

@@ -7,6 +7,26 @@ export type MaybePromise<T> = T | Promise<T>;
 /** Cleanup function returned by subscribe. */
 export type Cleanup = () => void;
 
+/** Sentinel value indicating a value is not yet available. */
+export const GraftLoading: unique symbol = Symbol("GraftLoading");
+
+/** Sentinel tag for error values propagating through the graph. */
+const GraftErrorTag: unique symbol = Symbol("GraftError");
+
+/** An error value that propagates through the graph instead of throwing. */
+export type GraftError = { readonly _tag: typeof GraftErrorTag; readonly error: unknown };
+
+/** Create a GraftError from a caught error. */
+export const graftError = (error: unknown): GraftError => ({ _tag: GraftErrorTag, error });
+
+/** Check if a value is a GraftError. */
+export const isGraftError = (value: unknown): value is GraftError =>
+  value !== null && typeof value === "object" && "_tag" in value && (value as GraftError)._tag === GraftErrorTag;
+
+/** Check if a value is a sentinel (GraftLoading or GraftError) that should short-circuit. */
+export const isSentinel = (value: unknown): value is typeof GraftLoading | GraftError =>
+  value === GraftLoading || isGraftError(value);
+
 /**
  * A graft component: a typed function from inputs (schema S) to output O.
  *
@@ -30,7 +50,7 @@ export interface GraftComponent<
   readonly schema: S;
   readonly outputSchema: z.ZodType<O>;
   readonly run: (props: z.infer<S>) => MaybePromise<O>;
-  readonly subscribe: (props: z.infer<S>, cb: (value: O) => void) => Cleanup;
+  readonly subscribe: (props: z.infer<S>, cb: (value: O | typeof GraftLoading | GraftError) => void) => Cleanup;
 }
 
 /** Output schema for components that return JSX. */
