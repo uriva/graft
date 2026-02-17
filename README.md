@@ -41,6 +41,8 @@ A **source** is a component with no inputs that pushes values over time — a We
 
 **`state`** is a global mutable cell. It returns a `[Component, setter]` tuple. The component behaves like a source (no inputs, emits values), and the setter can be called from anywhere — event handlers, outside the graph, wherever. New subscribers receive the current value immediately.
 
+**`instantiate`** creates an isolated copy of a subgraph. It takes a template — a function that builds and returns a component — and returns a new component. Each subscription gets its own fresh instance, so any `state()` or `source()` calls inside the template produce independent cells. This is how you get local state.
+
 **`compose({ into, from, key })`** wires `from`'s output into `into`'s input named `key`. Returns a new component whose inputs are `into`'s remaining inputs plus `from`'s inputs.
 
 When you're done composing, **`toReact`** converts the result into a regular `React.FC` (requires the output to be `ReactElement`).
@@ -258,7 +260,66 @@ setCurrentUser("Alice");
 
 The component behaves like a source — no inputs, emits values, works with `compose`. The setter is a plain function you can call from event handlers, callbacks, or anywhere else. New subscribers immediately receive the current value, so they never start empty.
 
-Note: `state` is global — all instances share the same value. For instance-local state (e.g., per-component form input), that's a separate problem.
+Note: `state` is global — all usages share the same cell. If you need local state (e.g., two independent form fields from the same template), use `instantiate`.
+
+### `instantiate(template)`
+
+Create an isolated instance of a subgraph. The template is a function that builds and returns a component. Each call to `instantiate` creates independent `state()` cells and `source()` subscriptions.
+
+**When to use `instantiate` vs a plain `component`:**
+
+A `component` is a pure function — same inputs, same output. It has no internal state. If you only need to transform data or render props into JSX, use `component`. That's most of the time.
+
+Use `instantiate` when a piece of your graph needs **its own mutable state** — state that is local to that usage, not shared globally. The typical case is reusable UI elements: form fields, toggles, expandable sections, anything where each usage needs independent internal state.
+
+```tsx
+import { z } from "zod/v4";
+import { component, compose, instantiate, state, toReact, View } from "graft";
+
+// A template: a function that builds a subgraph.
+// Each call creates fresh state() cells.
+const TextField = () => {
+  const [Value, setValue] = state({ schema: z.string(), initial: "" });
+
+  const Input = component({
+    input: z.object({ label: z.string(), text: z.string() }),
+    output: View,
+    run: ({ label, text }) => (
+      <label>
+        {label}
+        <input value={text} onChange={(e) => setValue(e.target.value)} />
+      </label>
+    ),
+  });
+
+  return compose({ into: Input, from: Value, key: "text" });
+};
+
+// Two independent instances — each has its own Value state cell.
+const NameField = instantiate(TextField);
+const EmailField = instantiate(TextField);
+
+const Form = component({
+  input: z.object({ name: View, email: View }),
+  output: View,
+  run: ({ name, email }) => (
+    <form>
+      {name}
+      {email}
+    </form>
+  ),
+});
+
+const WithName = compose({ into: Form, from: NameField, key: "name" });
+const App = toReact(
+  compose({ into: WithName, from: EmailField, key: "email" }),
+);
+
+// Each field maintains its own text value independently.
+<App label="Name" />
+```
+
+Without `instantiate`, both fields would share the same `state()` cell — typing in one would update both. `instantiate` ensures each usage gets its own isolated copy of the entire subgraph.
 
 ### `View`
 

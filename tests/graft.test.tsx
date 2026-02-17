@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import React, { act } from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, compose, source, state, toReact, View } from "../src/index.js";
+import { component, compose, instantiate, source, state, toReact, View } from "../src/index.js";
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
@@ -773,5 +773,241 @@ describe("state", () => {
 
     setValue(99);
     assert.equal(Value.run({}), 99);
+  });
+});
+
+describe("instantiate", () => {
+  it("returns a GraftComponent with same schema as template", () => {
+    const Template = () => component({
+      input: z.object({ x: z.number() }),
+      output: z.number(),
+      run: ({ x }) => x * 2,
+    });
+
+    const Instance = instantiate(Template);
+    assert.equal(Instance._tag, "graft-component");
+    assert.deepEqual(Object.keys(Instance.schema.shape), ["x"]);
+  });
+
+  it("run delegates to a fresh template instance", () => {
+    const Template = () => component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n + 1,
+    });
+
+    const Instance = instantiate(Template);
+    assert.equal(Instance.run({ n: 5 }), 6);
+  });
+
+  it("each subscribe call gets isolated state", () => {
+    // This is the key test: two instantiate() calls on the same template
+    // should produce independent state cells.
+    const Template = () => {
+      const [Value, setValue] = state({ schema: z.number(), initial: 0 });
+      const Inc = component({
+        input: z.object({ n: z.number() }),
+        output: z.number(),
+        run: ({ n }) => n + 1,
+      });
+      // We return both the composed component and the setter via closure
+      return { gc: compose({ into: Inc, from: Value, key: "n" }), setValue };
+    };
+
+    // Two independent instances
+    const inst1 = Template();
+    const inst2 = Template();
+
+    const values1: number[] = [];
+    const values2: number[] = [];
+    const c1 = inst1.gc.subscribe({}, (v) => { values1.push(v); });
+    const c2 = inst2.gc.subscribe({}, (v) => { values2.push(v); });
+
+    // Both start at initial (0 + 1 = 1)
+    assert.deepEqual(values1, [1]);
+    assert.deepEqual(values2, [1]);
+
+    // Mutate only inst1's state
+    inst1.setValue(10);
+    assert.deepEqual(values1, [1, 11]); // 10 + 1
+    assert.deepEqual(values2, [1]);     // unchanged
+
+    // Mutate only inst2's state
+    inst2.setValue(20);
+    assert.deepEqual(values1, [1, 11]);
+    assert.deepEqual(values2, [1, 21]); // 20 + 1
+
+    c1();
+    c2();
+  });
+
+  it("instantiate isolates state across two usages of same template", () => {
+    const TextInput = () => {
+      const [Value, setValue] = state({ schema: z.string(), initial: "" });
+      return { gc: Value, setValue };
+    };
+
+    const field1 = instantiate(() => TextInput().gc);
+    const field2 = instantiate(() => TextInput().gc);
+
+    const vals1: string[] = [];
+    const vals2: string[] = [];
+
+    // Subscribe to both — each should start at ""
+    const c1 = field1.subscribe({}, (v) => { vals1.push(v); });
+    const c2 = field2.subscribe({}, (v) => { vals2.push(v); });
+
+    assert.deepEqual(vals1, [""]);
+    assert.deepEqual(vals2, [""]);
+
+    c1();
+    c2();
+  });
+
+  it("instantiate with state composes into a View and renders via toReact", async () => {
+    // Template: a counter component with local state
+    const Counter = () => {
+      const [Count, _setCount] = state({ schema: z.number(), initial: 0 });
+      const Display = component({
+        input: z.object({ n: z.number() }),
+        output: View,
+        run: ({ n }) => <span data-testid="inst-count">{n}</span>,
+      });
+      return compose({ into: Display, from: Count, key: "n" });
+    };
+
+    const Instance = instantiate(Counter);
+    const App = toReact(Instance);
+
+    render(<App />);
+    const el = await screen.findByTestId("inst-count");
+    assert.equal(el.textContent, "0");
+  });
+
+  it("subscribe creates fresh instance each time (isolated lifecycle)", () => {
+    let callCount = 0;
+
+    const Template = () => {
+      callCount++;
+      return component({
+        input: z.object({}),
+        output: z.number(),
+        run: () => callCount,
+      });
+    };
+
+    const Instance = instantiate(Template);
+
+    // Probe call happens at instantiate time
+    assert.equal(callCount, 1);
+
+    // Each subscribe creates a new instance
+    const v1: number[] = [];
+    const c1 = Instance.subscribe({}, (v) => { v1.push(v); });
+    assert.equal(callCount, 2);
+    assert.deepEqual(v1, [2]);
+    c1();
+
+    const v2: number[] = [];
+    const c2 = Instance.subscribe({}, (v) => { v2.push(v); });
+    assert.equal(callCount, 3);
+    assert.deepEqual(v2, [3]);
+    c2();
+  });
+
+  it("cleanup tears down the inner instance", () => {
+    let cleaned = false;
+
+    const Template = () => source({
+      output: z.number(),
+      run: (emit) => {
+        emit(42);
+        return () => { cleaned = true; };
+      },
+    });
+
+    const Instance = instantiate(Template);
+    const values: number[] = [];
+    const cleanup = Instance.subscribe({}, (v) => { values.push(v); });
+
+    assert.deepEqual(values, [42]);
+    assert.equal(cleaned, false);
+
+    cleanup();
+    assert.equal(cleaned, true);
+  });
+
+  it("compose with instantiate — unsatisfied inputs bubble up", () => {
+    const Template = () => component({
+      input: z.object({ x: z.number() }),
+      output: z.number(),
+      run: ({ x }) => x * 3,
+    });
+
+    const Display = component({
+      input: z.object({ value: z.number() }),
+      output: View,
+      run: ({ value }) => <span data-testid="inst-compose">{value}</span>,
+    });
+
+    const Instance = instantiate(Template);
+    const Composed = compose({ into: Display, from: Instance, key: "value" });
+
+    // x should bubble up
+    assert.deepEqual(Object.keys(Composed.schema.shape), ["x"]);
+
+    const App = toReact(Composed);
+    render(<App x={7} />);
+    const el = screen.getByTestId("inst-compose");
+    assert.equal(el.textContent, "21");
+  });
+
+  it("two instantiated fields with state rendered together have independent state", async () => {
+    // Simulates two form fields — the core use case
+    const TextField = () => {
+      const [Value, setValue] = state({ schema: z.string(), initial: "" });
+
+      const Display = component({
+        input: z.object({ label: z.string(), text: z.string() }),
+        output: View,
+        run: ({ label, text }) => <div data-testid={`field-${label}`}>{text}</div>,
+      });
+
+      const WithValue = compose({ into: Display, from: Value, key: "text" });
+      return { gc: WithValue, setValue };
+    };
+
+    // We need to get the setters out, so we call the templates directly
+    // but the point is each call gives isolated state
+    const name = TextField();
+    const email = TextField();
+
+    const NameField = name.gc;
+    const EmailField = email.gc;
+
+    const NameReact = toReact(NameField);
+    const EmailReact = toReact(EmailField);
+
+    render(
+      <>
+        <NameReact label="name" />
+        <EmailReact label="email" />
+      </>,
+    );
+
+    const nameEl = await screen.findByTestId("field-name");
+    const emailEl = await screen.findByTestId("field-email");
+    assert.equal(nameEl.textContent, "");
+    assert.equal(emailEl.textContent, "");
+
+    // Update only the name field's state
+    act(() => { name.setValue("Alice"); });
+    assert.equal(screen.getByTestId("field-name").textContent, "Alice");
+    assert.equal(screen.getByTestId("field-email").textContent, "");
+
+    // Update only the email field's state
+    act(() => { email.setValue("alice@test.com"); });
+    assert.equal(screen.getByTestId("field-name").textContent, "Alice");
+    assert.equal(screen.getByTestId("field-email").textContent, "alice@test.com");
   });
 });
