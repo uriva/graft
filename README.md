@@ -4,7 +4,7 @@ Compose React components by wiring named parameters together.
 
 `compose({ into, from, key })` feeds `from`'s output into `into`'s input named `key`. The remaining unsatisfied inputs bubble up as the composed component's props. The result is always a standard React component.
 
-No prop drilling. No Context. No useState. No useEffect.
+No prop drilling. No Context. No useState. No useEffect. No manual subscriptions.
 
 ```
 npm install graft
@@ -22,39 +22,82 @@ There are only two things: **components** and **compose**.
 
 A **component** is a typed function from inputs to an output. If the output is a `ReactElement`, it renders UI. If the output is a `number`, `string`, `object`, etc., it's a data source. There is no separate "provider" concept — everything is a component.
 
+A **source** is a component with no inputs that pushes values over time — a WebSocket, a timer, a browser API. It's the only way to introduce reactivity. Everything downstream re-runs automatically when a source emits.
+
 **`compose({ into, from, key })`** wires `from`'s output into `into`'s input named `key`. Returns a new component whose inputs are `into`'s remaining inputs plus `from`'s inputs.
 
 When you're done composing, **`toReact`** converts the result into a regular `React.FC` (requires the output to be `ReactElement`).
 
 ## Quick example
 
+A small stock watchlist app. One data source pushes live prices, a data component formats them, a header component renders the title, and a page layout embeds the header as a child View.
+
 ```tsx
 import { z } from "zod/v4";
-import { component, compose, toReact, View } from "graft";
+import { component, compose, source, toReact, View } from "graft";
 
-// A visual component that displays a greeting
-const Greeting = component({
-  input: z.object({ message: z.string() }),
-  output: View,
-  run: ({ message }) => <h1>{message}</h1>,
+// A live price feed — pushes new values over time.
+// source() is the only way to introduce reactivity into a graft graph.
+// Everything downstream re-runs automatically when it emits.
+const PriceFeed = source({
+  output: z.number(),
+  run: (emit) => {
+    const ws = new WebSocket("wss://prices.example.com/AAPL");
+    ws.onmessage = (e) => emit(Number(e.data));
+    return () => ws.close();
+  },
 });
 
-// A data component that builds a greeting string from a name
-const MakeGreeting = component({
-  input: z.object({ name: z.string() }),
+// A pure data component — formats a number into a display string.
+// No hooks, no state. Just a function from inputs to output.
+const FormatPrice = component({
+  input: z.object({ price: z.number(), currency: z.string() }),
   output: z.string(),
-  run: ({ name }) => `Hello, ${name}!`,
+  run: ({ price, currency }) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency }).format(price),
 });
 
-// Wire MakeGreeting's output into Greeting's "message" input
-const HelloApp = compose({ into: Greeting, from: MakeGreeting, key: "message" });
+// A header component — returns a View.
+const Header = component({
+  input: z.object({ ticker: z.string() }),
+  output: View,
+  run: ({ ticker }) => <h1>{ticker}</h1>,
+});
 
-// Convert to a React component — only "name" remains as a prop
-const App = toReact(HelloApp);
+// The page layout — accepts a View for the header slot and a string for the price.
+// It doesn't know where header or displayPrice come from.
+const StockCard = component({
+  input: z.object({ header: View, displayPrice: z.string() }),
+  output: View,
+  run: ({ header, displayPrice }) => (
+    <div className="card">
+      {header}
+      <span className="price">{displayPrice}</span>
+    </div>
+  ),
+});
 
-// Use it like any React component
-<App name="Alice" />
-// Renders: <h1>Hello, Alice!</h1>
+// --- Wiring ---
+
+// FormatPrice needs { price, currency }, produces string.
+// Wire PriceFeed into FormatPrice's "price" input.
+// Remaining inputs: { currency }
+const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
+
+// Wire LivePrice's string output into StockCard's "displayPrice".
+// Remaining inputs: { header (View), currency }
+const WithPrice = compose({ into: StockCard, from: LivePrice, key: "displayPrice" });
+
+// Wire Header's View output into StockCard's "header" slot.
+// Remaining inputs: { ticker, currency }
+const App = toReact(
+  compose({ into: WithPrice, from: Header, key: "header" }),
+);
+
+// Two props left — everything else is wired internally.
+// When PriceFeed emits, the entire downstream chain re-runs
+// and React re-renders with the new price. No useEffect. No useState.
+<App ticker="AAPL" currency="USD" />
 ```
 
 ## API
@@ -122,6 +165,27 @@ const UserCardReact = toReact(UserCardWithAge);
 // TypeScript knows the props are { name: string, email: string, userId: string }
 <UserCardReact name="Alice" email="alice@example.com" userId="u123" />
 ```
+
+### `source({ output, run })`
+
+Create a push-based data source with no inputs. This is the only way to introduce reactivity into a graft graph. The `run` function receives an `emit` callback and returns a cleanup function.
+
+```tsx
+import { z } from "zod/v4";
+import { source } from "graft";
+
+const GeoLocation = source({
+  output: z.object({ lat: z.number(), lng: z.number() }),
+  run: (emit) => {
+    const id = navigator.geolocation.watchPosition((pos) =>
+      emit({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  },
+});
+```
+
+When a source emits a new value, every downstream component that depends on it re-runs automatically. Cleanup is called when the React component unmounts.
 
 ### `View`
 

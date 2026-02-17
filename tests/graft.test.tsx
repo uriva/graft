@@ -1,10 +1,10 @@
 import "global-jsdom/register";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import React from "react";
+import React, { act } from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, compose, toReact, View } from "../src/index.js";
+import { component, compose, source, toReact, View } from "../src/index.js";
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
@@ -177,6 +177,35 @@ describe("compose", () => {
     const shapeKeys = Object.keys(Composed.schema.shape).sort();
     assert.deepEqual(shapeKeys, ["x"]);
   });
+
+  it("embeds a View-returning component inside another View component", () => {
+    const Header = component({
+      input: z.object({ title: z.string() }),
+      output: View,
+      run: ({ title }) => <h1 data-testid="header">{title}</h1>,
+    });
+
+    const Page = component({
+      input: z.object({ header: View, body: z.string() }),
+      output: View,
+      run: ({ header, body }) => (
+        <div data-testid="page">
+          {header}
+          <p>{body}</p>
+        </div>
+      ),
+    });
+
+    const Composed = compose({ into: Page, from: Header, key: "header" });
+    const ComposedReact = toReact(Composed);
+
+    render(<ComposedReact title="Hello" body="content here" />);
+    assert.equal(screen.getByTestId("header").textContent, "Hello");
+    assert.equal(
+      screen.getByTestId("page").textContent,
+      "Hellocontent here",
+    );
+  });
 });
 
 describe("toReact", () => {
@@ -205,5 +234,365 @@ describe("toReact", () => {
       // @ts-expect-error — intentionally passing wrong type
       render(<Counter count="not a number" />);
     });
+  });
+});
+
+describe("async", () => {
+  it("async data component run returns a promise", async () => {
+    const Fetch = component({
+      input: z.object({ id: z.string() }),
+      output: z.number(),
+      run: async ({ id }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return id.length;
+      },
+    });
+    const result = Fetch.run({ id: "hello" });
+    assert.ok(result instanceof Promise);
+    assert.equal(await result, 5);
+  });
+
+  it("compose with async from produces async run", async () => {
+    const Display = component({
+      input: z.object({ value: z.number() }),
+      output: View,
+      run: ({ value }) => <span data-testid="val">{value}</span>,
+    });
+
+    const AsyncDouble = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: async ({ n }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return n * 2;
+      },
+    });
+
+    const Composed = compose({ into: Display, from: AsyncDouble, key: "value" });
+    const result = Composed.run({ n: 5 });
+    assert.ok(result instanceof Promise);
+    // The resolved value is a ReactElement
+    const el = await result;
+    assert.ok(el);
+  });
+
+  it("toReact renders async composed component", async () => {
+    const Display = component({
+      input: z.object({ value: z.string() }),
+      output: View,
+      run: ({ value }) => <p data-testid="async-result">{value}</p>,
+    });
+
+    const AsyncUpper = component({
+      input: z.object({ text: z.string() }),
+      output: z.string(),
+      run: async ({ text }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return text.toUpperCase();
+      },
+    });
+
+    const Composed = compose({ into: Display, from: AsyncUpper, key: "value" });
+    const App = toReact(Composed);
+
+    render(<App text="hello" />);
+
+    // Initially renders nothing (pending)
+    assert.equal(screen.queryByTestId("async-result"), null);
+
+    // Wait for async resolution
+    const el = await screen.findByTestId("async-result");
+    assert.equal(el.textContent, "HELLO");
+  });
+
+  it("chained async compose works", async () => {
+    const Show = component({
+      input: z.object({ msg: z.string() }),
+      output: View,
+      run: ({ msg }) => <div data-testid="chain">{msg}</div>,
+    });
+
+    const AsyncConcat = component({
+      input: z.object({ a: z.string(), b: z.string() }),
+      output: z.string(),
+      run: async ({ a, b }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return `${a}-${b}`;
+      },
+    });
+
+    const AsyncWrap = component({
+      input: z.object({ val: z.string() }),
+      output: z.string(),
+      run: async ({ val }) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return `[${val}]`;
+      },
+    });
+
+    const Step1 = compose({ into: Show, from: AsyncConcat, key: "msg" });
+    const Step2 = compose({ into: Step1, from: AsyncWrap, key: "a" });
+    const App = toReact(Step2);
+
+    render(<App val="x" b="y" />);
+    const el = await screen.findByTestId("chain");
+    assert.equal(el.textContent, "[x]-y");
+  });
+
+  it("async component error is thrown during render", async () => {
+    const Display = component({
+      input: z.object({ data: z.string() }),
+      output: View,
+      run: ({ data }) => <span>{data}</span>,
+    });
+
+    const Failing = component({
+      input: z.object({}),
+      output: z.string(),
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        throw new Error("fetch failed");
+      },
+    });
+
+    const Composed = compose({ into: Display, from: Failing, key: "data" });
+
+    // The composed run returns a promise that rejects
+    const result = Composed.run({});
+    assert.ok(result instanceof Promise);
+    await assert.rejects(result as Promise<unknown>, { message: "fetch failed" });
+  });
+});
+
+describe("source", () => {
+  it("creates a source with empty input schema", () => {
+    const Clock = source({
+      output: z.number(),
+      run: (emit) => {
+        emit(0);
+        return () => {};
+      },
+    });
+    assert.equal(Clock._tag, "graft-component");
+    assert.deepEqual(Object.keys(Clock.schema.shape), []);
+  });
+
+  it("subscribe receives emitted values", () => {
+    const values: number[] = [];
+    let emitter: ((v: number) => void) | null = null;
+
+    const Counter = source({
+      output: z.number(),
+      run: (emit) => {
+        emitter = emit;
+        emit(0);
+        return () => {};
+      },
+    });
+
+    const cleanup = Counter.subscribe({}, (v) => { values.push(v); });
+    assert.deepEqual(values, [0]);
+
+    emitter!(1);
+    emitter!(2);
+    assert.deepEqual(values, [0, 1, 2]);
+
+    cleanup();
+    // After cleanup, emissions should not be delivered
+    // (source's cleanup was called, so emitter is invalid)
+  });
+
+  it("cleanup stops the source", () => {
+    let cleaned = false;
+    const S = source({
+      output: z.number(),
+      run: (emit) => {
+        emit(1);
+        return () => { cleaned = true; };
+      },
+    });
+
+    const cleanup = S.subscribe({}, () => {});
+    assert.equal(cleaned, false);
+    cleanup();
+    assert.equal(cleaned, true);
+  });
+});
+
+describe("reactive compose", () => {
+  it("source composed into a data component re-emits on source change", () => {
+    let emitter: ((v: number) => void) | null = null;
+
+    const NumSource = source({
+      output: z.number(),
+      run: (emit) => {
+        emitter = emit;
+        emit(1);
+        return () => {};
+      },
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const Composed = compose({ into: Double, from: NumSource, key: "n" });
+
+    const values: number[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+
+    assert.deepEqual(values, [2]); // 1 * 2
+
+    emitter!(5);
+    assert.deepEqual(values, [2, 10]); // 5 * 2
+
+    emitter!(10);
+    assert.deepEqual(values, [2, 10, 20]);
+
+    cleanup();
+  });
+
+  it("source composed into a View re-renders via toReact", async () => {
+    let emitter: ((v: string) => void) | null = null;
+
+    const MsgSource = source({
+      output: z.string(),
+      run: (emit) => {
+        emitter = emit;
+        emit("hello");
+        return () => {};
+      },
+    });
+
+    const Display = component({
+      input: z.object({ text: z.string() }),
+      output: View,
+      run: ({ text }) => <div data-testid="reactive">{text}</div>,
+    });
+
+    const Composed = compose({ into: Display, from: MsgSource, key: "text" });
+    const App = toReact(Composed);
+
+    render(<App />);
+
+    // Initial value
+    const el = await screen.findByTestId("reactive");
+    assert.equal(el.textContent, "hello");
+
+    // Source emits a new value — should re-render
+    act(() => { emitter!("world"); });
+    assert.equal(screen.getByTestId("reactive").textContent, "world");
+
+    act(() => { emitter!("graft"); });
+    assert.equal(screen.getByTestId("reactive").textContent, "graft");
+  });
+
+  it("three-level reactive chain: source → data → data → view", async () => {
+    let emitter: ((v: number) => void) | null = null;
+
+    const NumSource = source({
+      output: z.number(),
+      run: (emit) => {
+        emitter = emit;
+        emit(3);
+        return () => {};
+      },
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const ToString = component({
+      input: z.object({ value: z.number() }),
+      output: z.string(),
+      run: ({ value }) => `val:${value}`,
+    });
+
+    const Show = component({
+      input: z.object({ msg: z.string() }),
+      output: View,
+      run: ({ msg }) => <span data-testid="chain-reactive">{msg}</span>,
+    });
+
+    // NumSource → Double (key: n) → ToString (key: value) → Show (key: msg)
+    const Step1 = compose({ into: Double, from: NumSource, key: "n" });
+    const Step2 = compose({ into: ToString, from: Step1, key: "value" });
+    const Step3 = compose({ into: Show, from: Step2, key: "msg" });
+    const App = toReact(Step3);
+
+    render(<App />);
+    const el = await screen.findByTestId("chain-reactive");
+    assert.equal(el.textContent, "val:6"); // 3 * 2 = 6
+
+    act(() => { emitter!(10); });
+    assert.equal(screen.getByTestId("chain-reactive").textContent, "val:20"); // 10 * 2 = 20
+  });
+
+  it("cleanup from toReact unmount disposes the source", () => {
+    let cleaned = false;
+
+    const S = source({
+      output: z.number(),
+      run: (emit) => {
+        emit(0);
+        return () => { cleaned = true; };
+      },
+    });
+
+    const Display = component({
+      input: z.object({ n: z.number() }),
+      output: View,
+      run: ({ n }) => <span>{n}</span>,
+    });
+
+    const Composed = compose({ into: Display, from: S, key: "n" });
+    const App = toReact(Composed);
+
+    const { unmount } = render(<App />);
+    assert.equal(cleaned, false);
+    unmount();
+    assert.equal(cleaned, true);
+  });
+
+  it("source with interval pattern", async () => {
+    let count = 0;
+
+    const Ticker = source({
+      output: z.number(),
+      run: (emit) => {
+        emit(count);
+        const id = setInterval(() => {
+          count++;
+          emit(count);
+        }, 50);
+        return () => clearInterval(id);
+      },
+    });
+
+    const Display = component({
+      input: z.object({ tick: z.number() }),
+      output: View,
+      run: ({ tick }) => <span data-testid="ticker">{tick}</span>,
+    });
+
+    const Composed = compose({ into: Display, from: Ticker, key: "tick" });
+    const App = toReact(Composed);
+
+    render(<App />);
+    const el = await screen.findByTestId("ticker");
+    assert.equal(el.textContent, "0");
+
+    // Wait for a couple ticks
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 120));
+    });
+
+    const val = Number(screen.getByTestId("ticker").textContent);
+    assert.ok(val >= 1, `Expected at least 1 tick, got ${val}`);
   });
 });

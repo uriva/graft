@@ -1,12 +1,20 @@
 import { z } from "zod/v4";
-import type { GraftComponent } from "./types.js";
+import type { Cleanup, GraftComponent, MaybePromise } from "./types.js";
+
+function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as Promise<T>).then === "function"
+  );
+}
 
 /**
  * Define a graft component from an input schema, output schema, and a function.
  *
  * If the function returns JSX, this is a visual component.
  * If it returns data, this is a data source.
- * compose() treats them the same.
+ * The run function may be sync or async — compose handles both.
  */
 export function component<
   S extends z.ZodObject<z.ZodRawShape>,
@@ -14,7 +22,18 @@ export function component<
 >({ input, output, run }: {
   input: S;
   output: z.ZodType<O>;
-  run: (props: z.infer<S>) => O;
+  run: (props: z.infer<S>) => MaybePromise<O>;
 }): GraftComponent<S, O> {
-  return { _tag: "graft-component", schema: input, outputSchema: output, run };
+  const subscribe = (props: z.infer<S>, cb: (value: O) => void): Cleanup => {
+    let cancelled = false;
+    const result = run(props);
+    if (isPromise(result)) {
+      result.then((v) => { if (!cancelled) cb(v); });
+    } else {
+      cb(result);
+    }
+    return () => { cancelled = true; };
+  };
+
+  return { _tag: "graft-component", schema: input, outputSchema: output, run, subscribe };
 }
