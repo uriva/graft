@@ -30,7 +30,7 @@ When you're done composing, **`toReact`** converts the result into a regular `Re
 
 ## Quick example
 
-A small stock watchlist app. One data source pushes live prices, a data component formats them, a header component renders the title, and a page layout embeds the header as a child View.
+A small stock watchlist app. A live price feed pushes values over a WebSocket, the company name is fetched async from an API, a header embeds as a child View, and a formatter turns the raw number into a display string.
 
 ```tsx
 import { z } from "zod/v4";
@@ -48,8 +48,18 @@ const PriceFeed = source({
   },
 });
 
+// An async data component — fetches the company name from an API.
+// The run function is async. compose handles this automatically.
+const CompanyName = component({
+  input: z.object({ ticker: z.string() }),
+  output: z.string(),
+  run: async ({ ticker }) => {
+    const res = await fetch(`/api/company/${ticker}`);
+    return (await res.json()).name;
+  },
+});
+
 // A pure data component — formats a number into a display string.
-// No hooks, no state. Just a function from inputs to output.
 const FormatPrice = component({
   input: z.object({ price: z.number(), currency: z.string() }),
   output: z.string(),
@@ -59,13 +69,13 @@ const FormatPrice = component({
 
 // A header component — returns a View.
 const Header = component({
-  input: z.object({ ticker: z.string() }),
+  input: z.object({ companyName: z.string() }),
   output: View,
-  run: ({ ticker }) => <h1>{ticker}</h1>,
+  run: ({ companyName }) => <h1>{companyName}</h1>,
 });
 
 // The page layout — accepts a View for the header slot and a string for the price.
-// It doesn't know where header or displayPrice come from.
+// It doesn't know where any of its inputs come from.
 const StockCard = component({
   input: z.object({ header: View, displayPrice: z.string() }),
   output: View,
@@ -79,24 +89,19 @@ const StockCard = component({
 
 // --- Wiring ---
 
-// FormatPrice needs { price, currency }, produces string.
-// Wire PriceFeed into FormatPrice's "price" input.
-// Remaining inputs: { currency }
+// PriceFeed → FormatPrice → StockCard.displayPrice
 const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
-
-// Wire LivePrice's string output into StockCard's "displayPrice".
-// Remaining inputs: { header (View), currency }
 const WithPrice = compose({ into: StockCard, from: LivePrice, key: "displayPrice" });
 
-// Wire Header's View output into StockCard's "header" slot.
-// Remaining inputs: { ticker, currency }
+// CompanyName (async) → Header → StockCard.header
+const NamedHeader = compose({ into: Header, from: CompanyName, key: "companyName" });
 const App = toReact(
-  compose({ into: WithPrice, from: Header, key: "header" }),
+  compose({ into: WithPrice, from: NamedHeader, key: "header" }),
 );
 
 // Two props left — everything else is wired internally.
-// When PriceFeed emits, the entire downstream chain re-runs
-// and React re-renders with the new price. No useEffect. No useState.
+// Renders nothing while CompanyName loads, then shows the card.
+// When PriceFeed emits, only the price path re-runs and React re-renders.
 <App ticker="AAPL" currency="USD" />
 ```
 
