@@ -2,7 +2,7 @@
 
 Compose React components by wiring named parameters together.
 
-`compose(A, B, key)` feeds B's output into A's prop named `key`. The remaining unsatisfied props bubble up as the composed component's props. The result is always a standard React component.
+`compose(A, B, key)` feeds B's output into A's input named `key`. The remaining unsatisfied inputs bubble up as the composed component's props. The result is always a standard React component.
 
 No prop drilling. No Context. No useState. No useEffect.
 
@@ -18,36 +18,35 @@ Graft lets you describe the wiring directly. You say *what* feeds into *what*, a
 
 ## Core concepts
 
-There are only three things: **components**, **providers**, and **compose**.
+There are only two things: **components** and **compose**.
 
-A **component** declares what props it needs (via a zod schema) and how to render them.
+A **component** is a typed function from inputs to an output. If the output is a `ReactElement`, it renders UI. If the output is a `number`, `string`, `object`, etc., it's a data source. There is no separate "provider" concept — everything is a component.
 
-A **provider** declares what inputs it needs, what it outputs, and how to compute the output from the inputs.
+**`compose(A, B, key)`** wires B's output into A's input named `key`. Returns a new component whose inputs are A's remaining inputs plus B's inputs.
 
-**`compose(A, B, key)`** wires B's output into A's prop named `key`. The result is a new component whose props are A's remaining props plus B's inputs.
-
-When you're done composing, **`toReact`** converts the result into a regular `React.FC`.
+When you're done composing, **`toReact`** converts the result into a regular `React.FC` (requires the output to be `ReactElement`).
 
 ## Quick example
 
 ```tsx
 import { z } from "zod/v4";
-import { component, provider, compose, toReact } from "graft";
+import { component, compose, toReact } from "graft";
 
-// A component that displays a greeting
+// A visual component that displays a greeting
 const Greeting = component(
   z.object({ message: z.string() }),
+  z.custom<React.ReactElement>(() => true),
   ({ message }) => <h1>{message}</h1>,
 );
 
-// A provider that builds a greeting string from a name
-const MakeGreeting = provider(
+// A data component that builds a greeting string from a name
+const MakeGreeting = component(
   z.object({ name: z.string() }),
   z.string(),
   ({ name }) => `Hello, ${name}!`,
 );
 
-// Wire MakeGreeting's output into Greeting's "message" prop
+// Wire MakeGreeting's output into Greeting's "message" input
 const HelloApp = compose(Greeting, MakeGreeting, "message");
 
 // Convert to a React component — only "name" remains as a prop
@@ -60,20 +59,22 @@ const App = toReact(HelloApp);
 
 ## API
 
-### `component(schema, render)`
+### `component(inputSchema, outputSchema, run)`
 
-Define a component from a zod object schema and a render function.
+Define a component from a zod input schema, a zod output schema, and a function.
 
 ```tsx
 import { z } from "zod/v4";
 import { component } from "graft";
 
+// A visual component (output is ReactElement)
 const UserCard = component(
   z.object({
     name: z.string(),
     email: z.string(),
     age: z.number(),
   }),
+  z.custom<React.ReactElement>(() => true),
   ({ name, email, age }) => (
     <div>
       <h2>{name}</h2>
@@ -82,28 +83,20 @@ const UserCard = component(
     </div>
   ),
 );
-```
 
-The schema is the source of truth for both TypeScript types and runtime validation.
-
-### `provider(inputSchema, outputSchema, run)`
-
-Define a data provider — a function that takes some inputs and produces an output.
-
-```tsx
-import { z } from "zod/v4";
-import { provider } from "graft";
-
-const FetchAge = provider(
+// A data component (output is a number)
+const FetchAge = component(
   z.object({ userId: z.string() }),
   z.number(),
   ({ userId }) => lookupAge(userId),
 );
 ```
 
+The input schema is the source of truth for both TypeScript types and runtime validation. The output schema declares the type of value the component produces.
+
 ### `compose(A, B, key)`
 
-Wire provider B's output into component A's prop named `key`. Returns a new component.
+Wire B's output into A's input named `key`. Returns a new component.
 
 ```tsx
 import { compose } from "graft";
@@ -115,11 +108,11 @@ import { compose } from "graft";
 const UserCardWithAge = compose(UserCard, FetchAge, "age");
 ```
 
-The key insight: `"age"` disappears from the props because it's now satisfied internally. `"userId"` appears because FetchAge needs it and nobody provides it yet.
+The key insight: `"age"` disappears from the inputs because it's now satisfied internally. `"userId"` appears because FetchAge needs it and nobody provides it yet.
 
 ### `toReact(graftComponent)`
 
-Convert a graft component into a standard `React.FC`. This is the boundary between graft and React. Props are validated at runtime — a `ZodError` is thrown if anything is missing or has the wrong type.
+Convert a graft component into a standard `React.FC`. This is the boundary between graft and React. The component must produce a `ReactElement`. Props are validated at runtime — a `ZodError` is thrown if anything is missing or has the wrong type.
 
 ```tsx
 import { toReact } from "graft";
@@ -132,32 +125,33 @@ const UserCardReact = toReact(UserCardWithAge);
 
 ## Chaining compositions
 
-`compose` returns a graft component, so you can compose again. Each step satisfies one more prop, and the unsatisfied inputs keep bubbling up.
+`compose` returns a graft component, so you can compose again. Each step satisfies one more input, and the unsatisfied inputs keep bubbling up.
 
 ```tsx
 const Display = component(
   z.object({ msg: z.string() }),
+  z.custom<React.ReactElement>(() => true),
   ({ msg }) => <p>{msg}</p>,
 );
 
-const Format = provider(
+const Format = component(
   z.object({ greeting: z.string(), name: z.string() }),
   z.string(),
   ({ greeting, name }) => `${greeting}, ${name}!`,
 );
 
-const MakeGreeting = provider(
+const MakeGreeting = component(
   z.object({ prefix: z.string() }),
   z.string(),
   ({ prefix }) => `${prefix} says`,
 );
 
 // Step 1: Format feeds into Display's "msg"
-// Remaining props: { greeting, name }
+// Remaining inputs: { greeting, name }
 const Step1 = compose(Display, Format, "msg");
 
 // Step 2: MakeGreeting feeds into Step1's "greeting"
-// Remaining props: { prefix, name }
+// Remaining inputs: { prefix, name }
 const Step2 = compose(Step1, MakeGreeting, "greeting");
 
 const App = toReact(Step2);
@@ -173,7 +167,7 @@ Each `compose` call is like drawing one edge in a dependency graph. The final co
 Consider a user profile page that needs data from multiple sources:
 
 ```tsx
-// --- Components ---
+// --- Visual component ---
 
 const ProfilePage = component(
   z.object({
@@ -182,6 +176,7 @@ const ProfilePage = component(
     postCount: z.number(),
     avatarUrl: z.string(),
   }),
+  z.custom<React.ReactElement>(() => true),
   ({ name, email, postCount, avatarUrl }) => (
     <div>
       <img src={avatarUrl} alt={name} />
@@ -192,75 +187,70 @@ const ProfilePage = component(
   ),
 );
 
-// --- Providers ---
+// --- Data components ---
 
-const UserInfo = provider(
+const UserInfo = component(
   z.object({ userId: z.string() }),
   z.object({ name: z.string(), email: z.string() }),
   ({ userId }) => db.getUser(userId),
 );
 
-const PostCount = provider(
+const PostCount = component(
   z.object({ userId: z.string() }),
   z.number(),
   ({ userId }) => db.countPosts(userId),
 );
 
-const Avatar = provider(
+const Avatar = component(
   z.object({ email: z.string() }),
   z.string(),
   ({ email }) => `https://gravatar.com/avatar/${hash(email)}`,
 );
 
-// --- Wiring ---
-
-// Start: ProfilePage needs { name, email, postCount, avatarUrl }
-
-// Wire UserInfo → name (but UserInfo returns an object, so this needs
-// a provider that extracts the name field — see below)
-const ExtractName = provider(
+const ExtractName = component(
   z.object({ userInfo: z.object({ name: z.string(), email: z.string() }) }),
   z.string(),
   ({ userInfo }) => userInfo.name,
 );
 
-const ExtractEmail = provider(
+const ExtractEmail = component(
   z.object({ userInfo: z.object({ name: z.string(), email: z.string() }) }),
   z.string(),
   ({ userInfo }) => userInfo.email,
 );
 
-// Build it up step by step:
+// --- Wiring ---
+
 const WithPostCount = compose(ProfilePage, PostCount, "postCount");
-// Props: { name, email, avatarUrl, userId }
+// Inputs: { name, email, avatarUrl, userId }
 
 const WithAvatar = compose(WithPostCount, Avatar, "avatarUrl");
-// Props: { name, userId, email }
-// (email is shared — Avatar needs it and it was already a prop)
+// Inputs: { name, userId, email }
 
 const WithName = compose(WithAvatar, ExtractName, "name");
-// Props: { userId, email, userInfo }
+// Inputs: { userId, email, userInfo }
 
 const WithEmail = compose(WithName, ExtractEmail, "email");
-// Props: { userId, userInfo }
+// Inputs: { userId, userInfo }
 
 const WithUserInfo = compose(WithEmail, UserInfo, "userInfo");
-// Props: { userId }
+// Inputs: { userId }
 
 const ProfilePageReact = toReact(WithUserInfo);
 
-// The only prop left is userId — everything else is wired internally
+// The only input left is userId — everything else is wired internally
 <ProfilePageReact userId="u123" />
 ```
 
 ## Runtime validation
 
-Every prop is validated at runtime using the zod schemas you defined. If a prop is missing or has the wrong type, you get a clear `ZodError` at render time — not a silent `undefined` propagating through your component tree.
+Every input is validated at runtime using the zod schemas you defined. If an input is missing or has the wrong type, you get a clear `ZodError` at render time — not a silent `undefined` propagating through your component tree.
 
 ```tsx
 const App = toReact(
   component(
     z.object({ count: z.number() }),
+    z.custom<React.ReactElement>(() => true),
     ({ count }) => <span>{count}</span>,
   ),
 );
@@ -274,12 +264,12 @@ const App = toReact(
 
 Graft is a runtime library, not a compiler plugin. `compose()` is a regular function call that:
 
-1. Takes A's schema and removes the key being wired
+1. Takes A's input schema and removes the key being wired
 2. Merges the remaining shape with B's input schema
 3. Returns a new graft component with the merged schema
 4. At render time, splits the incoming props, runs B, and passes the result to A
 
-The type-level generics ensure TypeScript knows exactly what props the composed component needs. The runtime zod validation ensures the types are enforced even in JavaScript or at module boundaries.
+The type-level generics ensure TypeScript knows exactly what inputs the composed component needs. The runtime zod validation ensures the types are enforced even in JavaScript or at module boundaries.
 
 ## Install
 

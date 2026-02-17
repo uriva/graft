@@ -1,53 +1,48 @@
 import "global-jsdom/register";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import React from "react";
+import React, { type ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, provider, compose, toReact } from "../src/index.js";
+import { component, compose, toReact } from "../src/index.js";
+
+// Helper: z.custom for ReactElement (no runtime validation needed for JSX)
+const reactElement = z.custom<ReactElement>(() => true);
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
     const schema = z.object({ name: z.string() });
-    const gc = component(schema, (props) => <div>{props.name}</div>);
+    const gc = component(schema, reactElement, (props) => (
+      <div>{props.name}</div>
+    ));
     assert.equal(gc._tag, "graft-component");
     assert.equal(gc.schema, schema);
   });
 
-  it("render returns a ReactElement", () => {
-    const gc = component(z.object({ x: z.number() }), (props) => (
+  it("run returns a ReactElement", () => {
+    const gc = component(z.object({ x: z.number() }), reactElement, (props) => (
       <span>{props.x}</span>
     ));
-    const el = gc.render({ x: 42 });
+    const el = gc.run({ x: 42 });
     assert.ok(el);
   });
-});
 
-describe("provider", () => {
-  it("creates a GraftProvider with correct tag and schemas", () => {
-    const input = z.object({ a: z.number(), b: z.number() });
-    const output = z.number();
-    const gp = provider(input, output, ({ a, b }) => a + b);
-    assert.equal(gp._tag, "graft-provider");
-    assert.equal(gp.schema, input);
-    assert.equal(gp.outputSchema, output);
-  });
-
-  it("run produces the expected output", () => {
-    const gp = provider(
+  it("works as a data component (returns a value, not JSX)", () => {
+    const gc = component(
       z.object({ a: z.number(), b: z.number() }),
       z.number(),
       ({ a, b }) => a + b,
     );
-    assert.equal(gp.run({ a: 3, b: 4 }), 7);
+    assert.equal(gc._tag, "graft-component");
+    assert.equal(gc.run({ a: 3, b: 4 }), 7);
   });
 });
 
 describe("compose", () => {
-  it("wires provider output into component prop", () => {
-    // Component that displays a sum
+  it("wires data component output into visual component prop", () => {
     const Display = component(
       z.object({ label: z.string(), sum: z.number() }),
+      reactElement,
       (props) => (
         <div>
           {props.label}: {props.sum}
@@ -55,8 +50,7 @@ describe("compose", () => {
       ),
     );
 
-    // Provider that adds two numbers
-    const Add = provider(
+    const Add = component(
       z.object({ a: z.number(), b: z.number() }),
       z.number(),
       ({ a, b }) => a + b,
@@ -76,6 +70,7 @@ describe("compose", () => {
   it("composed component renders correctly via toReact", () => {
     const Display = component(
       z.object({ label: z.string(), sum: z.number() }),
+      reactElement,
       (props) => (
         <span data-testid="result">
           {props.label}: {props.sum}
@@ -83,7 +78,7 @@ describe("compose", () => {
       ),
     );
 
-    const Add = provider(
+    const Add = component(
       z.object({ a: z.number(), b: z.number() }),
       z.number(),
       ({ a, b }) => a + b,
@@ -100,12 +95,15 @@ describe("compose", () => {
   it("throws at runtime if a required prop is missing", () => {
     const Display = component(
       z.object({ value: z.string() }),
+      reactElement,
       (props) => <div>{props.value}</div>,
     );
 
-    const Upper = provider(z.object({ text: z.string() }), z.string(), ({
-      text,
-    }) => text.toUpperCase());
+    const Upper = component(
+      z.object({ text: z.string() }),
+      z.string(),
+      ({ text }) => text.toUpperCase(),
+    );
 
     const Composed = compose(Display, Upper, "value");
     const ComposedReact = toReact(Composed);
@@ -116,20 +114,19 @@ describe("compose", () => {
   });
 
   it("chained compose works (three-level composition)", () => {
-    // C needs { msg: string }
-    const C = component(z.object({ msg: z.string() }), (props) => (
-      <p data-testid="msg">{props.msg}</p>
-    ));
+    const C = component(
+      z.object({ msg: z.string() }),
+      reactElement,
+      (props) => <p data-testid="msg">{props.msg}</p>,
+    );
 
-    // B takes { greeting: string, name: string } -> string
-    const B = provider(
+    const B = component(
       z.object({ greeting: z.string(), name: z.string() }),
       z.string(),
       ({ greeting, name }) => `${greeting}, ${name}!`,
     );
 
-    // A takes { prefix: string } -> string
-    const A = provider(
+    const A = component(
       z.object({ prefix: z.string() }),
       z.string(),
       ({ prefix }) => `${prefix} says`,
@@ -156,10 +153,10 @@ describe("compose", () => {
     assert.equal(screen.getByTestId("msg").textContent, "Alice says, Bob!");
   });
 
-  it("handles shared parameter names between component and provider", () => {
-    // Both A and B have a param called "x"
+  it("handles shared parameter names between components", () => {
     const A = component(
       z.object({ x: z.string(), result: z.number() }),
+      reactElement,
       (props) => (
         <span data-testid="out">
           {props.x}-{props.result}
@@ -167,7 +164,7 @@ describe("compose", () => {
       ),
     );
 
-    const B = provider(
+    const B = component(
       z.object({ x: z.number() }),
       z.number(),
       ({ x }) => x * 2,
@@ -182,10 +179,12 @@ describe("compose", () => {
 });
 
 describe("toReact", () => {
-  it("converts a simple component to React.FC", () => {
-    const gc = component(z.object({ who: z.string() }), (props) => (
-      <h1 data-testid="hello">Hello {props.who}</h1>
-    ));
+  it("converts a component to React.FC", () => {
+    const gc = component(
+      z.object({ who: z.string() }),
+      reactElement,
+      (props) => <h1 data-testid="hello">Hello {props.who}</h1>,
+    );
 
     const Hello = toReact(gc);
     render(<Hello who="World" />);
@@ -193,9 +192,11 @@ describe("toReact", () => {
   });
 
   it("validates props and throws on invalid input", () => {
-    const gc = component(z.object({ count: z.number() }), (props) => (
-      <span>{props.count}</span>
-    ));
+    const gc = component(
+      z.object({ count: z.number() }),
+      reactElement,
+      (props) => <span>{props.count}</span>,
+    );
 
     const Counter = toReact(gc);
 
