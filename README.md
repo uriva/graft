@@ -30,79 +30,81 @@ When you're done composing, **`toReact`** converts the result into a regular `Re
 
 ## Quick example
 
-A small stock watchlist app. A live price feed pushes values over a WebSocket, the company name is fetched async from an API, a header embeds as a child View, and a formatter turns the raw number into a display string.
+A live crypto price card. The price streams over Binance's public WebSocket, the coin name is fetched async from CoinGecko, and a header embeds as a child View inside the card layout. All real, no API keys.
 
 ```tsx
 import { z } from "zod/v4";
 import { component, compose, source, toReact, View } from "graft";
 
-// A live price feed — pushes new values over time.
+// A live price feed — pushes new values over a public WebSocket.
 // source() is the only way to introduce reactivity into a graft graph.
 // Everything downstream re-runs automatically when it emits.
 const PriceFeed = source({
   output: z.number(),
   run: (emit) => {
-    const ws = new WebSocket("wss://prices.example.com/AAPL");
-    ws.onmessage = (e) => emit(Number(e.data));
+    const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
+    ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
     return () => ws.close();
   },
 });
 
-// An async data component — fetches the company name from an API.
+// An async data component — fetches the coin name from CoinGecko.
 // The run function is async. compose handles this automatically.
-const CompanyName = component({
-  input: z.object({ ticker: z.string() }),
+const CoinName = component({
+  input: z.object({ coinId: z.string() }),
   output: z.string(),
-  run: async ({ ticker }) => {
-    const res = await fetch(`/api/company/${ticker}`);
+  run: async ({ coinId }) => {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false`,
+    );
     return (await res.json()).name;
   },
 });
 
 // A pure data component — formats a number into a display string.
 const FormatPrice = component({
-  input: z.object({ price: z.number(), currency: z.string() }),
+  input: z.object({ price: z.number() }),
   output: z.string(),
-  run: ({ price, currency }) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency }).format(price),
+  run: ({ price }) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price),
 });
 
 // A header component — returns a View.
 const Header = component({
-  input: z.object({ companyName: z.string() }),
+  input: z.object({ name: z.string() }),
   output: View,
-  run: ({ companyName }) => <h1>{companyName}</h1>,
+  run: ({ name }) => <h1>{name}</h1>,
 });
 
 // The page layout — accepts a View for the header slot and a string for the price.
 // It doesn't know where any of its inputs come from.
-const StockCard = component({
+const PriceCard = component({
   input: z.object({ header: View, displayPrice: z.string() }),
   output: View,
   run: ({ header, displayPrice }) => (
-    <div className="card">
+    <div>
       {header}
-      <span className="price">{displayPrice}</span>
+      <span>{displayPrice}</span>
     </div>
   ),
 });
 
 // --- Wiring ---
 
-// PriceFeed → FormatPrice → StockCard.displayPrice
+// PriceFeed → FormatPrice → PriceCard.displayPrice
 const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
-const WithPrice = compose({ into: StockCard, from: LivePrice, key: "displayPrice" });
+const WithPrice = compose({ into: PriceCard, from: LivePrice, key: "displayPrice" });
 
-// CompanyName (async) → Header → StockCard.header
-const NamedHeader = compose({ into: Header, from: CompanyName, key: "companyName" });
+// CoinName (async) → Header → PriceCard.header
+const NamedHeader = compose({ into: Header, from: CoinName, key: "name" });
 const App = toReact(
   compose({ into: WithPrice, from: NamedHeader, key: "header" }),
 );
 
-// Two props left — everything else is wired internally.
-// Renders nothing while CompanyName loads, then shows the card.
-// When PriceFeed emits, only the price path re-runs and React re-renders.
-<App ticker="AAPL" currency="USD" />
+// One prop left — everything else is wired internally.
+// Renders nothing while CoinGecko loads, then shows the card.
+// When Binance pushes a new trade, only the price path re-runs.
+<App coinId="bitcoin" />
 ```
 
 ## API
