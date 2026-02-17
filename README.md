@@ -2,18 +2,19 @@
                     ╭─── View ───╮
                     │  PriceCard  │
                     ╰─┬────────┬─╯
-               header │        │ displayPrice
+               header ▲        ▲ displayPrice
             ╭─────────┴─╮   ╭──┴──────────╮
             │   Header   │   │ FormatPrice  │
             ╰─────┬──────╯   ╰──────┬──────╯
-              name │            price │
+              name ▲            price ▲
           ╭────────┴───╮    ╭────────┴───╮
           │  CoinName   │    │  PriceFeed  │
           ╰──────┬─────╯    ╰────────────╯
-          coinId │              (source)
-                 ╰── props ──╮
-                             │
-                        <App coinId="bitcoin" />
+          coinId ▲              (source)
+                 │
+            props from caller
+                 │
+          <App coinId="bitcoin" />
 ```
 
 # graft
