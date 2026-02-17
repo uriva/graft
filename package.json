@@ -15,12 +15,14 @@
     "@testing-library/react": "^14.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^5.1.4",
     "global-jsdom": "^28.0.0",
     "jsdom": "^28.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vite": "^7.3.1"
   },
   "license": "MIT",
   "dependencies": {

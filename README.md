@@ -10,6 +10,10 @@ No prop drilling. No Context. No useState. No useEffect. No manual subscriptions
 npm install graft
 ```
 
+<p align="center">
+  <img src="demo.gif" alt="Live crypto price card demo" width="600" />
+</p>
+
 ## Why
 
 React components are functions with named parameters (props). When you build a UI, you're really building a graph of data dependencies between those functions. But React forces you to wire that graph imperatively — passing props down, lifting state up, wrapping in Context providers, sprinkling hooks everywhere.

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>graft — crypto price card</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        background: #0d1117;
+        color: #e6edf3;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+      }
+      .card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 32px 48px;
+        text-align: center;
+        min-width: 280px;
+      }
+      .card h1 {
+        margin: 0 0 8px;
+        font-size: 1.4em;
+        color: #8b949e;
+      }
+      .price {
+        font-size: 2.4em;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: #58a6ff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
