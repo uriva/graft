@@ -47,6 +47,14 @@ A **source** is a component with no inputs that pushes values over time — a We
 
 When you're done composing, **`toReact`** converts the result into a regular `React.FC` (requires the output to be `ReactElement`).
 
+### "The" vs "a"
+
+In React, everything is **"a"** by default. Each render creates *a* counter, *a* form, *a* piece of state. Multiple instances are the norm — you get isolation for free via hooks.
+
+Graft defaults to **"the"**. `state()` creates *the* cell. `source()` creates *the* stream. There is exactly one, and every subscriber sees the same value. Definiteness is the default.
+
+`instantiate()` is how you say **"a"** — it's the explicit opt-in to indefinite instances. Each subscription gets its own independent copy of the subgraph, with its own state cells and source subscriptions.
+
 ## Quick example
 
 A live crypto price card. The price streams over Binance's public WebSocket, the coin name is fetched async from CoinGecko, and a header embeds as a child View inside the card layout. All real, no API keys.
