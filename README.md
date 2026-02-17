@@ -1,3 +1,21 @@
+```
+                    ╭─── View ───╮
+                    │  PriceCard  │
+                    ╰─┬────────┬─╯
+               header │        │ displayPrice
+            ╭─────────┴─╮   ╭──┴──────────╮
+            │   Header   │   │ FormatPrice  │
+            ╰─────┬──────╯   ╰──────┬──────╯
+              name │            price │
+          ╭────────┴───╮    ╭────────┴───╮
+          │  CoinName   │    │  PriceFeed  │
+          ╰──────┬─────╯    ╰────────────╯
+          coinId │              (source)
+                 ╰── props ──╮
+                             │
+                        <App coinId="bitcoin" />
+```
+
 # graft
 
 Compose React components by wiring named parameters together.
@@ -9,10 +27,6 @@ No prop drilling. No Context. No useState. No useEffect. No manual subscriptions
 ```
 npm install graft
 ```
-
-<p align="center">
-  <img src="demo.gif" alt="Live crypto price card demo" width="600" />
-</p>
 
 ## Why
 
@@ -110,6 +124,10 @@ const App = toReact(
 // When Binance pushes a new trade, only the price path re-runs.
 <App coinId="bitcoin" />
 ```
+
+<p align="center">
+  <img src="demo.gif" alt="Live crypto price card demo" width="600" />
+</p>
 
 ## API
 
