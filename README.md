@@ -75,6 +75,20 @@ inputs become the new component's props). This is
 [graph programming](https://uriva.github.io/blog/graph-programming.html) applied
 to TypeScript and UI.
 
+## The tradeoffs
+
+In programming, everything is a tradeoff. Graft pays for these advantages with
+the following choices:
+
+1. Runtime schemas require a library like `zod`, less neat than just using
+   TypeScript types. But without it, it would be very easy to miss a dependency.
+   If Graft would ever become a programming language one day, this could be
+   greatly improved.
+1. Most of the computation graph is eager, so if you have a ternary downstream,
+   you might still compute all values for the two branches. In most cases this
+   shouldn't be a problem, as the CPU intensive work is rendering and not pure
+   computations. Secondly, in the future can be solved with lazy evaluation.
+
 ## Core concepts
 
 ### A component is a typed function
