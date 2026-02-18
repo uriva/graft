@@ -555,6 +555,14 @@ This means:
 
 Reference equality is intentional. Two different objects with identical content (`{ x: 1 } !== { x: 1 }`) are *not* deduped — this matches React's behavior and avoids the cost and surprises of deep comparison.
 
+## No unnecessary re-renders
+
+In React, when a parent re-renders, all its children re-render too — unless you manually opt out with `memo`, `useMemo`, `useCallback`, etc. A state change at the top of the tree cascades through every child, even ones that don't use that state. Preventing unnecessary renders is a constant tax on the developer.
+
+Graft doesn't have this problem. A value change only propagates along the explicit `compose()` edges. If source A feeds into component X, and source B feeds into component Y, then A changing has zero effect on Y — there's no shared tree to cascade through. Each component only re-runs when its actual inputs change.
+
+This isn't an optimization. It's a structural property of the architecture — graft simply doesn't have a mechanism to produce unnecessary re-renders in the first place.
+
 ## How it works
 
 Graft is a runtime library, not a compiler plugin. `compose()` is a regular function call that:
