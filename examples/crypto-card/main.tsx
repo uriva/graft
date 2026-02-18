@@ -1,12 +1,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { z } from "zod/v4";
-import { component, compose, source, toReact, View } from "../../src/index.js";
+import { component, compose, emitter, toReact, View } from "../../src/index.js";
 
 // A live price feed — pushes new values over a public WebSocket.
-const PriceFeed = source({
+const PriceFeed = emitter({
   output: z.number(),
-  run: (emit) => {
+  run: (_props, emit) => {
     const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
     ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
     return () => ws.close();

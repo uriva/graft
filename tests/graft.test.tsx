@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import React, { act } from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, compose, GraftLoading, instantiate, isGraftError, source, state, toReact, View } from "../src/index.js";
+import { component, compose, GraftLoading, instantiate, isGraftError, emitter, state, toReact, View } from "../src/index.js";
 import { isSentinel, graftError } from "../src/types.js";
 
 describe("component", () => {
@@ -365,11 +365,11 @@ describe("async", () => {
   });
 });
 
-describe("source", () => {
-  it("creates a source with empty input schema", () => {
-    const Clock = source({
+describe("emitter", () => {
+  it("creates an emitter with empty input schema", () => {
+    const Clock = emitter({
       output: z.number(),
-      run: (emit) => {
+      run: (_props, emit) => {
         emit(0);
         return () => {};
       },
@@ -380,12 +380,12 @@ describe("source", () => {
 
   it("subscribe receives emitted values", () => {
     const values: number[] = [];
-    let emitter: ((v: number) => void) | null = null;
+    let emitFn: ((v: number) => void) | null = null;
 
-    const Counter = source({
+    const Counter = emitter({
       output: z.number(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit(0);
         return () => {};
       },
@@ -394,20 +394,20 @@ describe("source", () => {
     const cleanup = Counter.subscribe({}, (v) => { values.push(v); });
     assert.deepEqual(values, [0]);
 
-    emitter!(1);
-    emitter!(2);
+    emitFn!(1);
+    emitFn!(2);
     assert.deepEqual(values, [0, 1, 2]);
 
     cleanup();
     // After cleanup, emissions should not be delivered
-    // (source's cleanup was called, so emitter is invalid)
+    // (emitter's cleanup was called, so emitter is invalid)
   });
 
-  it("cleanup stops the source", () => {
+  it("cleanup stops the emitter", () => {
     let cleaned = false;
-    const S = source({
+    const S = emitter({
       output: z.number(),
-      run: (emit) => {
+      run: (_props, emit) => {
         emit(1);
         return () => { cleaned = true; };
       },
@@ -421,13 +421,13 @@ describe("source", () => {
 });
 
 describe("reactive compose", () => {
-  it("source composed into a data component re-emits on source change", () => {
-    let emitter: ((v: number) => void) | null = null;
+  it("emitter composed into a data component re-emits on emitter change", () => {
+    let emitFn: ((v: number) => void) | null = null;
 
-    const NumSource = source({
+    const NumSource = emitter({
       output: z.number(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit(1);
         return () => {};
       },
@@ -446,22 +446,22 @@ describe("reactive compose", () => {
 
     assert.deepEqual(values, [2]); // 1 * 2
 
-    emitter!(5);
+    emitFn!(5);
     assert.deepEqual(values, [2, 10]); // 5 * 2
 
-    emitter!(10);
+    emitFn!(10);
     assert.deepEqual(values, [2, 10, 20]);
 
     cleanup();
   });
 
-  it("source composed into a View re-renders via toReact", async () => {
-    let emitter: ((v: string) => void) | null = null;
+  it("emitter composed into a View re-renders via toReact", async () => {
+    let emitFn: ((v: string) => void) | null = null;
 
-    const MsgSource = source({
+    const MsgSource = emitter({
       output: z.string(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit("hello");
         return () => {};
       },
@@ -483,20 +483,20 @@ describe("reactive compose", () => {
     assert.equal(el.textContent, "hello");
 
     // Source emits a new value — should re-render
-    act(() => { emitter!("world"); });
+    act(() => { emitFn!("world"); });
     assert.equal(screen.getByTestId("reactive").textContent, "world");
 
-    act(() => { emitter!("graft"); });
+    act(() => { emitFn!("graft"); });
     assert.equal(screen.getByTestId("reactive").textContent, "graft");
   });
 
-  it("three-level reactive chain: source → data → data → view", async () => {
-    let emitter: ((v: number) => void) | null = null;
+  it("three-level reactive chain: emitter → data → data → view", async () => {
+    let emitFn: ((v: number) => void) | null = null;
 
-    const NumSource = source({
+    const NumSource = emitter({
       output: z.number(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit(3);
         return () => {};
       },
@@ -530,16 +530,16 @@ describe("reactive compose", () => {
     const el = await screen.findByTestId("chain-reactive");
     assert.equal(el.textContent, "val:6"); // 3 * 2 = 6
 
-    act(() => { emitter!(10); });
+    act(() => { emitFn!(10); });
     assert.equal(screen.getByTestId("chain-reactive").textContent, "val:20"); // 10 * 2 = 20
   });
 
-  it("cleanup from toReact unmount disposes the source", () => {
+  it("cleanup from toReact unmount disposes the emitter", () => {
     let cleaned = false;
 
-    const S = source({
+    const S = emitter({
       output: z.number(),
-      run: (emit) => {
+      run: (_props, emit) => {
         emit(0);
         return () => { cleaned = true; };
       },
@@ -560,12 +560,12 @@ describe("reactive compose", () => {
     assert.equal(cleaned, true);
   });
 
-  it("source with interval pattern", async () => {
+  it("emitter with interval pattern", async () => {
     let count = 0;
 
-    const Ticker = source({
+    const Ticker = emitter({
       output: z.number(),
-      run: (emit) => {
+      run: (_props, emit) => {
         emit(count);
         const id = setInterval(() => {
           count++;
@@ -919,9 +919,9 @@ describe("instantiate", () => {
   it("cleanup tears down the inner instance", () => {
     let cleaned = false;
 
-    const Template = () => source({
+    const Template = () => emitter({
       output: z.number(),
-      run: (emit) => {
+      run: (_props, emit) => {
         emit(42);
         return () => { cleaned = true; };
       },
@@ -1054,10 +1054,10 @@ describe("GraftLoading", () => {
     cleanup();
   });
 
-  it("source without sync emit produces GraftLoading first", () => {
-    const Delayed = source({
+  it("emitter without sync emit produces GraftLoading first", () => {
+    const Delayed = emitter({
       output: z.number(),
-      run: (emit) => {
+      run: (_props, emit) => {
         // Does NOT call emit synchronously
         const id = setTimeout(() => emit(42), 10);
         return () => clearTimeout(id);
@@ -1074,10 +1074,10 @@ describe("GraftLoading", () => {
     cleanup();
   });
 
-  it("source with sync emit does NOT produce GraftLoading", () => {
-    const Immediate = source({
+  it("emitter with sync emit does NOT produce GraftLoading", () => {
+    const Immediate = emitter({
       output: z.number(),
-      run: (emit) => {
+      run: (_props, emit) => {
         emit(99);
         return () => {};
       },
@@ -1200,14 +1200,14 @@ describe("GraftLoading", () => {
 });
 
 describe("deduplication", () => {
-  it("source emitting same primitive value twice → into's run called only once", () => {
-    let emitter: ((v: number) => void) | null = null;
+  it("emitter emitting same primitive value twice → into's run called only once", () => {
+    let emitFn: ((v: number) => void) | null = null;
     let runCount = 0;
 
-    const Src = source({
+    const Src = emitter({
       output: z.number(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit(10);
         return () => {};
       },
@@ -1228,12 +1228,12 @@ describe("deduplication", () => {
     assert.deepEqual(values, [20]);
 
     // Emit same value again — should be deduped
-    emitter!(10);
+    emitFn!(10);
     assert.equal(runCount, 1);
     assert.deepEqual(values, [20]);
 
     // Emit same value a third time — still deduped
-    emitter!(10);
+    emitFn!(10);
     assert.equal(runCount, 1);
     assert.deepEqual(values, [20]);
 
@@ -1275,13 +1275,13 @@ describe("deduplication", () => {
     cleanup();
   });
 
-  it("source emitting different values → all propagate (no false dedup)", () => {
-    let emitter: ((v: number) => void) | null = null;
+  it("emitter emitting different values → all propagate (no false dedup)", () => {
+    let emitFn: ((v: number) => void) | null = null;
 
-    const Src = source({
+    const Src = emitter({
       output: z.number(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit(1);
         return () => {};
       },
@@ -1300,21 +1300,21 @@ describe("deduplication", () => {
 
     assert.deepEqual(values, [1]);
 
-    emitter!(2);
-    emitter!(3);
-    emitter!(4);
+    emitFn!(2);
+    emitFn!(3);
+    emitFn!(4);
     assert.deepEqual(values, [1, 2, 3, 4]);
 
     cleanup();
   });
 
   it("object reference equality: same ref deduped, different objects with same content NOT deduped", () => {
-    let emitter: ((v: { x: number }) => void) | null = null;
+    let emitFn: ((v: { x: number }) => void) | null = null;
 
-    const Src = source({
+    const Src = emitter({
       output: z.object({ x: z.number() }),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         return () => {};
       },
     });
@@ -1338,17 +1338,17 @@ describe("deduplication", () => {
     assert.equal(runCount, 0);
 
     const obj1 = { x: 42 };
-    emitter!(obj1);
+    emitFn!(obj1);
     assert.equal(runCount, 1);
     assert.deepEqual(values, [42]);
 
     // Same reference — should be deduped
-    emitter!(obj1);
+    emitFn!(obj1);
     assert.equal(runCount, 1);
     assert.deepEqual(values, [42]);
 
     // Different object with same content — NOT deduped (=== fails)
-    emitter!({ x: 42 });
+    emitFn!({ x: 42 });
     assert.equal(runCount, 2);
     assert.deepEqual(values, [42, 42]);
 
@@ -1413,13 +1413,13 @@ describe("deduplication", () => {
     cleanup();
   });
 
-  it("multi-level dedup: three-level chain, source spam → only distinct values reach view", () => {
-    let emitter: ((v: number) => void) | null = null;
+  it("multi-level dedup: three-level chain, emitter spam → only distinct values reach view", () => {
+    let emitFn: ((v: number) => void) | null = null;
 
-    const Src = source({
+    const Src = emitter({
       output: z.number(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit(1);
         return () => {};
       },
@@ -1450,21 +1450,21 @@ describe("deduplication", () => {
     assert.equal(toStringCount, 1);
 
     // Spam same value — nothing should propagate
-    emitter!(1);
-    emitter!(1);
-    emitter!(1);
+    emitFn!(1);
+    emitFn!(1);
+    emitFn!(1);
     assert.deepEqual(values, ["v:2"]);
     assert.equal(doubleCount, 1);
     assert.equal(toStringCount, 1);
 
     // New value — should propagate through entire chain
-    emitter!(5);
+    emitFn!(5);
     assert.deepEqual(values, ["v:2", "v:10"]);
     assert.equal(doubleCount, 2);
     assert.equal(toStringCount, 2);
 
     // Spam the new value — nothing
-    emitter!(5);
+    emitFn!(5);
     assert.deepEqual(values, ["v:2", "v:10"]);
     assert.equal(doubleCount, 2);
     assert.equal(toStringCount, 2);
@@ -1472,14 +1472,14 @@ describe("deduplication", () => {
     cleanup();
   });
 
-  it("dedup works with toReact — same source value does not cause re-render", async () => {
-    let emitter: ((v: string) => void) | null = null;
+  it("dedup works with toReact — same emitter value does not cause re-render", async () => {
+    let emitFn: ((v: string) => void) | null = null;
     let renderCount = 0;
 
-    const Src = source({
+    const Src = emitter({
       output: z.string(),
-      run: (emit) => {
-        emitter = emit;
+      run: (_props, emit) => {
+        emitFn = emit;
         emit("hello");
         return () => {};
       },
@@ -1500,12 +1500,12 @@ describe("deduplication", () => {
     const initialRenderCount = renderCount;
 
     // Emit same value — should NOT trigger re-render
-    act(() => { emitter!("hello"); });
+    act(() => { emitFn!("hello"); });
     assert.equal(renderCount, initialRenderCount);
     assert.equal(screen.getByTestId("dedup-react").textContent, "hello");
 
     // Emit different value — should trigger re-render
-    act(() => { emitter!("world"); });
+    act(() => { emitFn!("world"); });
     assert.equal(renderCount, initialRenderCount + 1);
     assert.equal(screen.getByTestId("dedup-react").textContent, "world");
   });
@@ -1638,18 +1638,18 @@ describe("multi-wire compose", () => {
     assert.equal(screen.getByTestId("mw-bubble").textContent, "count:=50");
   });
 
-  it("multi-wire with reactive sources", async () => {
+  it("multi-wire with reactive emitters", async () => {
     let emitA: ((v: string) => void) | null = null;
     let emitB: ((v: number) => void) | null = null;
 
-    const SrcA = source({
+    const SrcA = emitter({
       output: z.string(),
-      run: (emit) => { emitA = emit; emit("hello"); return () => {}; },
+      run: (_props, emit) => { emitA = emit; emit("hello"); return () => {}; },
     });
 
-    const SrcB = source({
+    const SrcB = emitter({
       output: z.number(),
-      run: (emit) => { emitB = emit; emit(1); return () => {}; },
+      run: (_props, emit) => { emitB = emit; emit(1); return () => {}; },
     });
 
     const Display = component({
@@ -1879,10 +1879,10 @@ describe("boundary validation", () => {
   });
 
   it("subscribe path: throws when from emits wrong type", () => {
-    // source claims z.string() but emits a number
-    const Bad = source({
+    // emitter claims z.string() but emits a number
+    const Bad = emitter({
       output: z.string(),
-      run: (emit) => {
+      run: (_props, emit) => {
         (emit as (v: unknown) => void)(123);
         return () => {};
       },

@@ -14,7 +14,7 @@ function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
  *
  * The template is a function that builds and returns a GraftComponent.
  * Each call to subscribe() invokes the template fresh, so any state()
- * or source() calls inside produce independent cells/subscriptions.
+ * or emitter() calls inside produce independent cells/subscriptions.
  *
  * This is the mechanism for local state. Without instantiate(), all
  * usages of a component that contains state() would share the same

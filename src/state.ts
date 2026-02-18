@@ -5,7 +5,7 @@ import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from
  * Create a global mutable state cell.
  *
  * Returns a tuple: [Component, setter].
- * - Component is a source-like GraftComponent (no inputs) that emits
+ * - Component is an emitter-like GraftComponent (no inputs) that emits
  *   the current value whenever the setter is called.
  * - setter is a plain function you can call from anywhere.
  *

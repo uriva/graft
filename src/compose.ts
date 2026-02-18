@@ -211,7 +211,7 @@ function composeSingle<
  * Convert a GraftComponent that returns ReactElement into a real React.FC.
  * This is the boundary between graft and React.
  *
- * Uses subscribe() internally so that reactive sources automatically
+ * Uses subscribe() internally so that reactive emitters automatically
  * cause re-renders. For non-reactive graphs this fires once.
  *
  * GraftLoading and GraftError values are rendered as null.

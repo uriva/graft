@@ -114,16 +114,16 @@ const App = toReact(FormattedPrice);
 <App price={42000} />
 ```
 
-## source replaces useEffect
+## emitter replaces useEffect
 
-In React you'd use `useEffect` + `useState` for a WebSocket, a timer, or a browser API. In graft, that's a `source` — a component with no inputs that pushes values over time. Everything downstream re-runs automatically.
+In React you'd use `useEffect` + `useState` for a WebSocket, a timer, or a browser API. In graft, that's an `emitter` — a component that pushes values over time. Everything downstream re-runs automatically.
 
 ```tsx
-import { source } from "graftjs";
+import { emitter } from "graftjs";
 
-const PriceFeed = source({
+const PriceFeed = emitter({
   output: z.number(),
-  run: (emit) => {
+  run: (_props, emit) => {
     const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
     ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
     return () => ws.close(); // cleanup on unmount
@@ -166,9 +166,9 @@ setCurrentUser("Alice");
 
 In React, everything is "a" by default. Each render creates a counter, a form, a piece of state. Multiple instances are the norm — you get isolation for free via hooks.
 
-Graft defaults to "the". `state()` creates the cell. `source()` creates the stream. There is exactly one, and every subscriber sees the same value. Definiteness is the default.
+Graft defaults to "the". `state()` creates the cell. `emitter()` creates the stream. There is exactly one, and every subscriber sees the same value. Definiteness is the default.
 
-`instantiate()` is how you say "a" — it's the explicit opt-in to indefinite instances. Each subscription gets its own independent copy of the subgraph, with its own state cells and source subscriptions.
+`instantiate()` is how you say "a" — it's the explicit opt-in to indefinite instances. Each subscription gets its own independent copy of the subgraph, with its own state cells and emitter subscriptions.
 
 ```tsx
 import { instantiate } from "graftjs";
@@ -213,11 +213,11 @@ graph BT
 
 ```tsx
 import { z } from "zod/v4";
-import { component, compose, source, toReact, View } from "graftjs";
+import { component, compose, emitter, toReact, View } from "graftjs";
 
-const PriceFeed = source({
+const PriceFeed = emitter({
   output: z.number(),
-  run: (emit) => {
+  run: (_props, emit) => {
     const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
     ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
     return () => ws.close();
@@ -277,7 +277,7 @@ const App = toReact(
 ## What you get
 
 - **No dependency arrays.** There are no hooks, so there are no stale closures and no rules-of-hooks footguns.
-- **No unnecessary re-renders.** Value changes only propagate along explicit `compose()` edges. If source A feeds component X and source B feeds component Y, A changing has zero effect on Y. This isn't an optimization — graft simply doesn't have a mechanism to cascade re-renders.
+- **No unnecessary re-renders.** Value changes only propagate along explicit `compose()` edges. If emitter A feeds component X and emitter B feeds component Y, A changing has zero effect on Y. This isn't an optimization — graft simply doesn't have a mechanism to cascade re-renders.
 - **No prop drilling.** Need to wire a data source into a deeply nested component? Just `compose()` it directly. No touching the components in between.
 - **Runtime type safety.** Every `compose` boundary validates with zod. A type mismatch gives you a clear `ZodError` at the boundary where it happened — not a silent `undefined` propagating through your tree.
 - **Async just works.** Make `run` async and loading states propagate automatically. Errors short-circuit downstream. No `useEffect`, no `isLoading` boilerplate.
@@ -289,7 +289,7 @@ The idea comes from [graph programming](https://uriva.github.io/blog/graph-progr
 
 When a component is async, graft handles the in-between time with two sentinels that flow through the graph like regular data.
 
-**`GraftLoading`** — emitted when a value isn't available yet. Async components emit it immediately, then the resolved value. Sources emit it until their first `emit()` call. `compose` short-circuits on loading — downstream `run` functions aren't called. `toReact` renders `null`.
+**`GraftLoading`** — emitted when a value isn't available yet. Async components emit it immediately, then the resolved value. Emitters emit it until their first `emit()` call. `compose` short-circuits on loading — downstream `run` functions aren't called. `toReact` renders `null`.
 
 **`GraftError`** — wraps a caught error from an async rejection. Like loading, it short-circuits through `compose`. `toReact` renders `null`.
 
@@ -322,7 +322,7 @@ AsyncData.subscribe({ id: "123" }, (value) => {
 
 ## Deduplication
 
-`compose` deduplicates emissions from `from` using reference equality (`===`). If `from` emits the same value twice in a row, `into`'s `run` isn't called and nothing propagates downstream. This means a source spamming the same primitive is a no-op, and calling a state setter with the current value is free.
+`compose` deduplicates emissions from `from` using reference equality (`===`). If `from` emits the same value twice in a row, `into`'s `run` isn't called and nothing propagates downstream. This means an emitter spamming the same primitive is a no-op, and calling a state setter with the current value is free.
 
 ## Install
 
