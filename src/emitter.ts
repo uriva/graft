@@ -5,7 +5,7 @@ import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from
  * Create a push-based component that emits values over time.
  *
  * This is the only way to introduce reactivity into a graft graph.
- * The `run` function receives the input props and an `emit` callback;
+ * The `run` function receives an `emit` callback and (optionally) the input props;
  * call it whenever you have a new value. Return a cleanup function to
  * tear down subscriptions / intervals / etc.
  *
@@ -16,7 +16,7 @@ import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from
  * Example (no inputs):
  *   const Clock = emitter({
  *     output: z.number(),
- *     run: (_props, emit) => {
+ *     run: (emit) => {
  *       const id = setInterval(() => emit(Date.now()), 1000);
  *       return () => clearInterval(id);
  *     },
@@ -26,7 +26,7 @@ import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from
  *   const PriceFeed = emitter({
  *     input: z.object({ symbol: z.string() }),
  *     output: z.number(),
- *     run: ({ symbol }, emit) => {
+ *     run: (emit, { symbol }) => {
  *       const ws = new WebSocket(`wss://stream.example.com/${symbol}`);
  *       ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
  *       return () => ws.close();
@@ -39,7 +39,7 @@ export function emitter<
 >({ input, output, run }: {
   input?: S;
   output: z.ZodType<O>;
-  run: (props: z.infer<S extends undefined ? z.ZodObject<{}> : S>, emit: (value: O) => void) => Cleanup;
+  run: (emit: (value: O) => void, props: z.infer<S extends undefined ? z.ZodObject<{}> : S>) => Cleanup;
 }): GraftComponent<S extends undefined ? z.ZodObject<{}> : S, O> {
   type Schema = S extends undefined ? z.ZodObject<{}> : S;
   const schema = (input ?? z.object({})) as Schema;
@@ -49,10 +49,10 @@ export function emitter<
     cb: (value: O | typeof GraftLoading | GraftError) => void,
   ): Cleanup => {
     let emitted = false;
-    const cleanup = run(props, (value: O) => {
+    const cleanup = run((value: O) => {
       emitted = true;
       cb(value);
-    });
+    }, props);
     if (!emitted) cb(GraftLoading);
     return cleanup;
   };
@@ -63,10 +63,10 @@ export function emitter<
     outputSchema: output,
     run: (props: z.infer<Schema>) => {
       return new Promise<O>((resolve) => {
-        const cleanup = run(props, (value: O) => {
+        const cleanup = run((value: O) => {
           cleanup();
           resolve(value);
-        });
+        }, props);
       });
     },
     subscribe,

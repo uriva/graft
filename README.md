@@ -123,7 +123,7 @@ import { emitter } from "graftjs";
 
 const PriceFeed = emitter({
   output: z.number(),
-  run: (_props, emit) => {
+  run: (emit) => {
     const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
     ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
     return () => ws.close(); // cleanup on unmount
@@ -217,7 +217,7 @@ import { component, compose, emitter, toReact, View } from "graftjs";
 
 const PriceFeed = emitter({
   output: z.number(),
-  run: (_props, emit) => {
+  run: (emit) => {
     const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
     ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
     return () => ws.close();

@@ -369,7 +369,7 @@ describe("emitter", () => {
   it("creates an emitter with empty input schema", () => {
     const Clock = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emit(0);
         return () => {};
       },
@@ -384,7 +384,7 @@ describe("emitter", () => {
 
     const Counter = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit(0);
         return () => {};
@@ -407,7 +407,7 @@ describe("emitter", () => {
     let cleaned = false;
     const S = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emit(1);
         return () => { cleaned = true; };
       },
@@ -426,7 +426,7 @@ describe("reactive compose", () => {
 
     const NumSource = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit(1);
         return () => {};
@@ -460,7 +460,7 @@ describe("reactive compose", () => {
 
     const MsgSource = emitter({
       output: z.string(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit("hello");
         return () => {};
@@ -495,7 +495,7 @@ describe("reactive compose", () => {
 
     const NumSource = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit(3);
         return () => {};
@@ -539,7 +539,7 @@ describe("reactive compose", () => {
 
     const S = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emit(0);
         return () => { cleaned = true; };
       },
@@ -565,7 +565,7 @@ describe("reactive compose", () => {
 
     const Ticker = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emit(count);
         const id = setInterval(() => {
           count++;
@@ -921,7 +921,7 @@ describe("instantiate", () => {
 
     const Template = () => emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emit(42);
         return () => { cleaned = true; };
       },
@@ -1057,7 +1057,7 @@ describe("GraftLoading", () => {
   it("emitter without sync emit produces GraftLoading first", () => {
     const Delayed = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         // Does NOT call emit synchronously
         const id = setTimeout(() => emit(42), 10);
         return () => clearTimeout(id);
@@ -1077,7 +1077,7 @@ describe("GraftLoading", () => {
   it("emitter with sync emit does NOT produce GraftLoading", () => {
     const Immediate = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emit(99);
         return () => {};
       },
@@ -1206,7 +1206,7 @@ describe("deduplication", () => {
 
     const Src = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit(10);
         return () => {};
@@ -1280,7 +1280,7 @@ describe("deduplication", () => {
 
     const Src = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit(1);
         return () => {};
@@ -1313,7 +1313,7 @@ describe("deduplication", () => {
 
     const Src = emitter({
       output: z.object({ x: z.number() }),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         return () => {};
       },
@@ -1418,7 +1418,7 @@ describe("deduplication", () => {
 
     const Src = emitter({
       output: z.number(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit(1);
         return () => {};
@@ -1478,7 +1478,7 @@ describe("deduplication", () => {
 
     const Src = emitter({
       output: z.string(),
-      run: (_props, emit) => {
+      run: (emit) => {
         emitFn = emit;
         emit("hello");
         return () => {};
@@ -1644,12 +1644,12 @@ describe("multi-wire compose", () => {
 
     const SrcA = emitter({
       output: z.string(),
-      run: (_props, emit) => { emitA = emit; emit("hello"); return () => {}; },
+      run: (emit) => { emitA = emit; emit("hello"); return () => {}; },
     });
 
     const SrcB = emitter({
       output: z.number(),
-      run: (_props, emit) => { emitB = emit; emit(1); return () => {}; },
+      run: (emit) => { emitB = emit; emit(1); return () => {}; },
     });
 
     const Display = component({
@@ -1882,7 +1882,7 @@ describe("boundary validation", () => {
     // emitter claims z.string() but emits a number
     const Bad = emitter({
       output: z.string(),
-      run: (_props, emit) => {
+      run: (emit) => {
         (emit as (v: unknown) => void)(123);
         return () => {};
       },
