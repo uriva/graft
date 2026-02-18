@@ -20,7 +20,7 @@ Compose React components by wiring named parameters together.
 No prop drilling. No Context. No useState. No useEffect. No manual subscriptions.
 
 ```
-npm install graft
+npm install graftjs
 ```
 
 ## Why
@@ -566,7 +566,7 @@ The type-level generics ensure TypeScript knows exactly what inputs the composed
 ## Install
 
 ```
-npm install graft
+npm install graftjs
 ```
 
 Requires React 18+ as a peer dependency. Uses [zod v4](https://zod.dev) (`zod/v4` import) for schemas.
