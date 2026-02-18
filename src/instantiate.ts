@@ -1,5 +1,11 @@
 import { z } from "zod/v4";
-import { GraftLoading, type Cleanup, type GraftError, type GraftComponent, type MaybePromise } from "./types.js";
+import {
+  type Cleanup,
+  type GraftComponent,
+  type GraftError,
+  GraftLoading,
+  type MaybePromise,
+} from "./types.js";
 
 function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
   return (
@@ -48,7 +54,10 @@ export function instantiate<
     return instance.run(props);
   };
 
-  const subscribe = (props: z.infer<S>, cb: (value: O | typeof GraftLoading | GraftError) => void): Cleanup => {
+  const subscribe = (
+    props: z.infer<S>,
+    cb: (value: O | typeof GraftLoading | GraftError) => void,
+  ): Cleanup => {
     const instance = template();
     return instance.subscribe(props, cb);
   };

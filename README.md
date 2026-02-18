@@ -13,13 +13,18 @@ _The smallest API imaginable._
 
 # graft
 
-A tiny self sufficient coding and UI framework.
+In an ideal world, Graft would be a programming language, but for now you can
+also think of it a tiny, self sufficient TypeScript programming framework.
 
-Create entire sophisticated apps with simple state and effect management.
+Graft focuses on non-linear, async friendly composition.
 
-JSX friendly.
+Use it for UI or anything. E.g. you can replace React entirely, or just a part
+of your app (it is compatible).
 
-Focused on wiring outputs into inputs as a graph, nothing else.
+It is JSX friendly.
+
+The main concept is `compose` and it is used to wire `component`s, which are
+just runtime typed functions.
 
 `compose({ into: target, from: {keyA: sourceA, keyB: sourceB } })` connects
 between 3 components. The remaining unsatisfied inputs of `target` bubble up as
@@ -29,23 +34,22 @@ simple component with a set of known typed inputs and output.
 No prop drilling. No Context. No useState. No useEffect. No manual
 subscriptions.
 
+To install it -
+
 ```
 npm install graftjs
 ```
 
 ## Why
 
-Components are functions with named parameters (props). When you build a UI,
-you're really building a graph of data dependencies between those functions.
+Graft solves problems that arise in UI (e.g. in React) and non-UI programming.
 
 React forces you to do two things:
 
 1. Sprinkle hooks everywhere, ending up with impure components or things like
    `useEffect` dependencies array, or weird hook rules.
-2. Nest components within each other, coupling views and requiring prop
-   drilling.
-
-Too much magic, too coupled and too hard to reason about.
+2. Nest components within each other, coupling views which leads to prop
+   drilling / signature duplication.
 
 Graft on the other hand lets you describe the wiring directly. You focus on
 types and composition of independent elements.

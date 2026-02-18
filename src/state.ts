@@ -1,5 +1,10 @@
 import { z } from "zod/v4";
-import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from "./types.js";
+import {
+  type Cleanup,
+  type GraftComponent,
+  type GraftError,
+  GraftLoading,
+} from "./types.js";
 
 /**
  * Create a global mutable state cell.
@@ -22,7 +27,9 @@ export function state<O>({ schema, initial }: {
   initial: O;
 }): [GraftComponent<z.ZodObject<{}>, O>, (value: O) => void] {
   let current: O = initial;
-  const listeners = new Set<(value: O | typeof GraftLoading | GraftError) => void>();
+  const listeners = new Set<
+    (value: O | typeof GraftLoading | GraftError) => void
+  >();
 
   const setter = (value: O) => {
     current = value;

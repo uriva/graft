@@ -30,7 +30,8 @@ const FormatPrice = component({
   input: z.object({ price: z.number() }),
   output: z.string(),
   run: ({ price }) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price),
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+      .format(price),
 });
 
 // A header component — returns a View.
@@ -55,7 +56,11 @@ const PriceCard = component({
 // --- Wiring ---
 
 const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
-const WithPrice = compose({ into: PriceCard, from: LivePrice, key: "displayPrice" });
+const WithPrice = compose({
+  into: PriceCard,
+  from: LivePrice,
+  key: "displayPrice",
+});
 
 const NamedHeader = compose({ into: Header, from: CoinName, key: "name" });
 const App = toReact(

@@ -1,6 +1,13 @@
-import React, { type ReactElement, useState, useEffect } from "react";
+import React, { type ReactElement, useEffect, useState } from "react";
 import { z } from "zod/v4";
-import { GraftLoading, isSentinel, type Cleanup, type GraftError, type GraftComponent, type MaybePromise } from "./types.js";
+import {
+  type Cleanup,
+  type GraftComponent,
+  type GraftError,
+  GraftLoading,
+  isSentinel,
+  type MaybePromise,
+} from "./types.js";
 
 /** Sentinel for "no previous value" in deduplication logic. */
 const UNSET: unique symbol = Symbol("UNSET");
@@ -89,12 +96,22 @@ export function compose<
 // Implementation
 export function compose({ into, from, key }: {
   into: GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>;
-  from: GraftComponent<z.ZodObject<z.ZodRawShape>, unknown> | Record<string, GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>>;
+  from:
+    | GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>
+    | Record<string, GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>>;
   key?: string;
 }): GraftComponent<z.ZodObject<z.ZodRawShape>, unknown> {
   // Multi-wire form: from is a Record<string, GraftComponent>
-  if (!key && typeof from === "object" && from !== null && (from as { _tag?: string })._tag !== "graft-component") {
-    const entries = Object.entries(from as Record<string, GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>>);
+  if (
+    !key && typeof from === "object" && from !== null &&
+    (from as { _tag?: string })._tag !== "graft-component"
+  ) {
+    const entries = Object.entries(
+      from as Record<
+        string,
+        GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>
+      >,
+    );
     if (entries.length === 0) return into;
     let result: GraftComponent<z.ZodObject<z.ZodRawShape>, unknown> = into;
     for (const [k, provider] of entries) {
@@ -157,7 +174,8 @@ function composeSingle<
     let disposed = false;
 
     // Deduplication: skip re-subscription when from emits the same value.
-    let lastFromValue: OB | typeof GraftLoading | GraftError | typeof UNSET = UNSET;
+    let lastFromValue: OB | typeof GraftLoading | GraftError | typeof UNSET =
+      UNSET;
 
     const fromCleanup = from.subscribe(
       fromInput as z.infer<SB>,
@@ -241,7 +259,7 @@ export function toReact<S extends z.ZodObject<z.ZodRawShape>>(
         cancelled = true;
         cleanup();
       };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [gc, ...Object.values(props as Record<string, unknown>)]);
 
     return element;

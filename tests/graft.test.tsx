@@ -4,8 +4,18 @@ import assert from "node:assert/strict";
 import React, { act } from "react";
 import { render, screen } from "@testing-library/react";
 import { z } from "zod/v4";
-import { component, compose, GraftLoading, instantiate, isGraftError, emitter, state, toReact, View } from "../src/index.js";
-import { isSentinel, graftError } from "../src/types.js";
+import {
+  component,
+  compose,
+  emitter,
+  GraftLoading,
+  instantiate,
+  isGraftError,
+  state,
+  toReact,
+  View,
+} from "../src/index.js";
+import { graftError, isSentinel } from "../src/types.js";
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
@@ -269,7 +279,11 @@ describe("async", () => {
       },
     });
 
-    const Composed = compose({ into: Display, from: AsyncDouble, key: "value" });
+    const Composed = compose({
+      into: Display,
+      from: AsyncDouble,
+      key: "value",
+    });
     const result = Composed.run({ n: 5 });
     assert.ok(result instanceof Promise);
     // The resolved value is a ReactElement
@@ -361,7 +375,9 @@ describe("async", () => {
     // The composed run returns a promise that rejects
     const result = Composed.run({});
     assert.ok(result instanceof Promise);
-    await assert.rejects(result as Promise<unknown>, { message: "fetch failed" });
+    await assert.rejects(result as Promise<unknown>, {
+      message: "fetch failed",
+    });
   });
 });
 
@@ -391,7 +407,9 @@ describe("emitter", () => {
       },
     });
 
-    const cleanup = Counter.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Counter.subscribe({}, (v) => {
+      values.push(v);
+    });
     assert.deepEqual(values, [0]);
 
     emitFn!(1);
@@ -409,7 +427,9 @@ describe("emitter", () => {
       output: z.number(),
       run: (emit) => {
         emit(1);
-        return () => { cleaned = true; };
+        return () => {
+          cleaned = true;
+        };
       },
     });
 
@@ -442,7 +462,9 @@ describe("reactive compose", () => {
     const Composed = compose({ into: Double, from: NumSource, key: "n" });
 
     const values: number[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     assert.deepEqual(values, [2]); // 1 * 2
 
@@ -483,10 +505,14 @@ describe("reactive compose", () => {
     assert.equal(el.textContent, "hello");
 
     // Source emits a new value — should re-render
-    act(() => { emitFn!("world"); });
+    act(() => {
+      emitFn!("world");
+    });
     assert.equal(screen.getByTestId("reactive").textContent, "world");
 
-    act(() => { emitFn!("graft"); });
+    act(() => {
+      emitFn!("graft");
+    });
     assert.equal(screen.getByTestId("reactive").textContent, "graft");
   });
 
@@ -530,7 +556,9 @@ describe("reactive compose", () => {
     const el = await screen.findByTestId("chain-reactive");
     assert.equal(el.textContent, "val:6"); // 3 * 2 = 6
 
-    act(() => { emitFn!(10); });
+    act(() => {
+      emitFn!(10);
+    });
     assert.equal(screen.getByTestId("chain-reactive").textContent, "val:20"); // 10 * 2 = 20
   });
 
@@ -541,7 +569,9 @@ describe("reactive compose", () => {
       output: z.number(),
       run: (emit) => {
         emit(0);
-        return () => { cleaned = true; };
+        return () => {
+          cleaned = true;
+        };
       },
     });
 
@@ -615,7 +645,9 @@ describe("state", () => {
     });
 
     const values: string[] = [];
-    const cleanup = Value.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Value.subscribe({}, (v) => {
+      values.push(v);
+    });
     assert.deepEqual(values, ["hello"]);
     cleanup();
   });
@@ -628,8 +660,12 @@ describe("state", () => {
 
     const values1: number[] = [];
     const values2: number[] = [];
-    const c1 = Value.subscribe({}, (v) => { values1.push(v); });
-    const c2 = Value.subscribe({}, (v) => { values2.push(v); });
+    const c1 = Value.subscribe({}, (v) => {
+      values1.push(v);
+    });
+    const c2 = Value.subscribe({}, (v) => {
+      values2.push(v);
+    });
 
     assert.deepEqual(values1, [0]);
     assert.deepEqual(values2, [0]);
@@ -653,7 +689,9 @@ describe("state", () => {
     });
 
     const values: number[] = [];
-    const cleanup = Value.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Value.subscribe({}, (v) => {
+      values.push(v);
+    });
     assert.deepEqual(values, [0]);
 
     cleanup();
@@ -672,7 +710,9 @@ describe("state", () => {
     setValue("third");
 
     const values: string[] = [];
-    const cleanup = Value.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Value.subscribe({}, (v) => {
+      values.push(v);
+    });
     assert.deepEqual(values, ["third"]);
     cleanup();
   });
@@ -692,7 +732,9 @@ describe("state", () => {
     const Composed = compose({ into: Double, from: Count, key: "n" });
 
     const values: number[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v);
+    });
     assert.deepEqual(values, [10]); // 5 * 2
 
     setCount(7);
@@ -721,10 +763,14 @@ describe("state", () => {
     const el = await screen.findByTestId("state-view");
     assert.equal(el.textContent, "initial");
 
-    act(() => { setLabel("updated"); });
+    act(() => {
+      setLabel("updated");
+    });
     assert.equal(screen.getByTestId("state-view").textContent, "updated");
 
-    act(() => { setLabel("final"); });
+    act(() => {
+      setLabel("final");
+    });
     assert.equal(screen.getByTestId("state-view").textContent, "final");
   });
 
@@ -761,7 +807,9 @@ describe("state", () => {
     const el = await screen.findByTestId("state-chain");
     assert.equal(el.textContent, "val:6"); // 3 * 2
 
-    act(() => { setNum(10); });
+    act(() => {
+      setNum(10);
+    });
     assert.equal(screen.getByTestId("state-chain").textContent, "val:20"); // 10 * 2
   });
 
@@ -779,11 +827,12 @@ describe("state", () => {
 
 describe("instantiate", () => {
   it("returns a GraftComponent with same schema as template", () => {
-    const Template = () => component({
-      input: z.object({ x: z.number() }),
-      output: z.number(),
-      run: ({ x }) => x * 2,
-    });
+    const Template = () =>
+      component({
+        input: z.object({ x: z.number() }),
+        output: z.number(),
+        run: ({ x }) => x * 2,
+      });
 
     const Instance = instantiate(Template);
     assert.equal(Instance._tag, "graft-component");
@@ -791,11 +840,12 @@ describe("instantiate", () => {
   });
 
   it("run delegates to a fresh template instance", () => {
-    const Template = () => component({
-      input: z.object({ n: z.number() }),
-      output: z.number(),
-      run: ({ n }) => n + 1,
-    });
+    const Template = () =>
+      component({
+        input: z.object({ n: z.number() }),
+        output: z.number(),
+        run: ({ n }) => n + 1,
+      });
 
     const Instance = instantiate(Template);
     assert.equal(Instance.run({ n: 5 }), 6);
@@ -821,8 +871,12 @@ describe("instantiate", () => {
 
     const values1: number[] = [];
     const values2: number[] = [];
-    const c1 = inst1.gc.subscribe({}, (v) => { values1.push(v); });
-    const c2 = inst2.gc.subscribe({}, (v) => { values2.push(v); });
+    const c1 = inst1.gc.subscribe({}, (v) => {
+      values1.push(v);
+    });
+    const c2 = inst2.gc.subscribe({}, (v) => {
+      values2.push(v);
+    });
 
     // Both start at initial (0 + 1 = 1)
     assert.deepEqual(values1, [1]);
@@ -831,7 +885,7 @@ describe("instantiate", () => {
     // Mutate only inst1's state
     inst1.setValue(10);
     assert.deepEqual(values1, [1, 11]); // 10 + 1
-    assert.deepEqual(values2, [1]);     // unchanged
+    assert.deepEqual(values2, [1]); // unchanged
 
     // Mutate only inst2's state
     inst2.setValue(20);
@@ -855,8 +909,12 @@ describe("instantiate", () => {
     const vals2: string[] = [];
 
     // Subscribe to both — each should start at ""
-    const c1 = field1.subscribe({}, (v) => { vals1.push(v); });
-    const c2 = field2.subscribe({}, (v) => { vals2.push(v); });
+    const c1 = field1.subscribe({}, (v) => {
+      vals1.push(v);
+    });
+    const c2 = field2.subscribe({}, (v) => {
+      vals2.push(v);
+    });
 
     assert.deepEqual(vals1, [""]);
     assert.deepEqual(vals2, [""]);
@@ -904,13 +962,17 @@ describe("instantiate", () => {
 
     // Each subscribe creates a new instance
     const v1: number[] = [];
-    const c1 = Instance.subscribe({}, (v) => { v1.push(v); });
+    const c1 = Instance.subscribe({}, (v) => {
+      v1.push(v);
+    });
     assert.equal(callCount, 2);
     assert.deepEqual(v1, [2]);
     c1();
 
     const v2: number[] = [];
-    const c2 = Instance.subscribe({}, (v) => { v2.push(v); });
+    const c2 = Instance.subscribe({}, (v) => {
+      v2.push(v);
+    });
     assert.equal(callCount, 3);
     assert.deepEqual(v2, [3]);
     c2();
@@ -919,17 +981,22 @@ describe("instantiate", () => {
   it("cleanup tears down the inner instance", () => {
     let cleaned = false;
 
-    const Template = () => emitter({
-      output: z.number(),
-      run: (emit) => {
-        emit(42);
-        return () => { cleaned = true; };
-      },
-    });
+    const Template = () =>
+      emitter({
+        output: z.number(),
+        run: (emit) => {
+          emit(42);
+          return () => {
+            cleaned = true;
+          };
+        },
+      });
 
     const Instance = instantiate(Template);
     const values: number[] = [];
-    const cleanup = Instance.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Instance.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     assert.deepEqual(values, [42]);
     assert.equal(cleaned, false);
@@ -939,11 +1006,12 @@ describe("instantiate", () => {
   });
 
   it("compose with instantiate — unsatisfied inputs bubble up", () => {
-    const Template = () => component({
-      input: z.object({ x: z.number() }),
-      output: z.number(),
-      run: ({ x }) => x * 3,
-    });
+    const Template = () =>
+      component({
+        input: z.object({ x: z.number() }),
+        output: z.number(),
+        run: ({ x }) => x * 3,
+      });
 
     const Display = component({
       input: z.object({ value: z.number() }),
@@ -971,7 +1039,9 @@ describe("instantiate", () => {
       const Display = component({
         input: z.object({ label: z.string(), text: z.string() }),
         output: View,
-        run: ({ label, text }) => <div data-testid={`field-${label}`}>{text}</div>,
+        run: ({ label, text }) => (
+          <div data-testid={`field-${label}`}>{text}</div>
+        ),
       });
 
       const WithValue = compose({ into: Display, from: Value, key: "text" });
@@ -1002,14 +1072,21 @@ describe("instantiate", () => {
     assert.equal(emailEl.textContent, "");
 
     // Update only the name field's state
-    act(() => { name.setValue("Alice"); });
+    act(() => {
+      name.setValue("Alice");
+    });
     assert.equal(screen.getByTestId("field-name").textContent, "Alice");
     assert.equal(screen.getByTestId("field-email").textContent, "");
 
     // Update only the email field's state
-    act(() => { email.setValue("alice@test.com"); });
+    act(() => {
+      email.setValue("alice@test.com");
+    });
     assert.equal(screen.getByTestId("field-name").textContent, "Alice");
-    assert.equal(screen.getByTestId("field-email").textContent, "alice@test.com");
+    assert.equal(
+      screen.getByTestId("field-email").textContent,
+      "alice@test.com",
+    );
   });
 });
 
@@ -1025,7 +1102,9 @@ describe("GraftLoading", () => {
     });
 
     const values: unknown[] = [];
-    const cleanup = Fetch.subscribe({ id: "hello" }, (v) => { values.push(v); });
+    const cleanup = Fetch.subscribe({ id: "hello" }, (v) => {
+      values.push(v);
+    });
 
     // GraftLoading emitted synchronously
     assert.equal(values.length, 1);
@@ -1047,7 +1126,9 @@ describe("GraftLoading", () => {
     });
 
     const values: unknown[] = [];
-    const cleanup = Add.subscribe({ a: 3, b: 4 }, (v) => { values.push(v); });
+    const cleanup = Add.subscribe({ a: 3, b: 4 }, (v) => {
+      values.push(v);
+    });
 
     // Only the result, no GraftLoading
     assert.deepEqual(values, [7]);
@@ -1065,7 +1146,9 @@ describe("GraftLoading", () => {
     });
 
     const values: unknown[] = [];
-    const cleanup = Delayed.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Delayed.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     // GraftLoading because no sync emit
     assert.equal(values.length, 1);
@@ -1084,7 +1167,9 @@ describe("GraftLoading", () => {
     });
 
     const values: unknown[] = [];
-    const cleanup = Immediate.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Immediate.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     // Just the value, no GraftLoading
     assert.deepEqual(values, [99]);
@@ -1110,7 +1195,9 @@ describe("GraftLoading", () => {
     const Composed = compose({ into: Display, from: AsyncData, key: "value" });
 
     const values: unknown[] = [];
-    const cleanup = Composed.subscribe({ n: 5 }, (v) => { values.push(v); });
+    const cleanup = Composed.subscribe({ n: 5 }, (v) => {
+      values.push(v);
+    });
 
     // First emission is GraftLoading (short-circuit — Display.run was NOT called)
     assert.equal(values.length, 1);
@@ -1216,13 +1303,18 @@ describe("deduplication", () => {
     const Transform = component({
       input: z.object({ n: z.number() }),
       output: z.number(),
-      run: ({ n }) => { runCount++; return n * 2; },
+      run: ({ n }) => {
+        runCount++;
+        return n * 2;
+      },
     });
 
     const Composed = compose({ into: Transform, from: Src, key: "n" });
 
     const values: number[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v as number);
+    });
 
     assert.equal(runCount, 1);
     assert.deepEqual(values, [20]);
@@ -1251,13 +1343,18 @@ describe("deduplication", () => {
     const Double = component({
       input: z.object({ n: z.number() }),
       output: z.number(),
-      run: ({ n }) => { runCount++; return n * 2; },
+      run: ({ n }) => {
+        runCount++;
+        return n * 2;
+      },
     });
 
     const Composed = compose({ into: Double, from: Value, key: "n" });
 
     const values: number[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v as number);
+    });
 
     assert.equal(runCount, 1);
     assert.deepEqual(values, [10]);
@@ -1296,7 +1393,9 @@ describe("deduplication", () => {
     const Composed = compose({ into: Identity, from: Src, key: "n" });
 
     const values: number[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v as number);
+    });
 
     assert.deepEqual(values, [1]);
 
@@ -1324,7 +1423,10 @@ describe("deduplication", () => {
     const Reader = component({
       input: z.object({ obj: z.object({ x: z.number() }) }),
       output: z.number(),
-      run: ({ obj }) => { runCount++; return obj.x; },
+      run: ({ obj }) => {
+        runCount++;
+        return obj.x;
+      },
     });
 
     const Composed = compose({ into: Reader, from: Src, key: "obj" });
@@ -1376,7 +1478,9 @@ describe("deduplication", () => {
     const Composed = compose({ into: Double, from: AsyncNum, key: "n" });
 
     const values: unknown[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     // Should get exactly one GraftLoading, not two
     assert.equal(values.length, 1);
@@ -1401,7 +1505,9 @@ describe("deduplication", () => {
     });
 
     const values: unknown[] = [];
-    const cleanup = AsyncNum.subscribe({}, (v) => { values.push(v); });
+    const cleanup = AsyncNum.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     assert.equal(values.length, 1);
     assert.equal(values[0], GraftLoading);
@@ -1429,21 +1535,29 @@ describe("deduplication", () => {
     const Double = component({
       input: z.object({ n: z.number() }),
       output: z.number(),
-      run: ({ n }) => { doubleCount++; return n * 2; },
+      run: ({ n }) => {
+        doubleCount++;
+        return n * 2;
+      },
     });
 
     let toStringCount = 0;
     const ToString = component({
       input: z.object({ value: z.number() }),
       output: z.string(),
-      run: ({ value }) => { toStringCount++; return `v:${value}`; },
+      run: ({ value }) => {
+        toStringCount++;
+        return `v:${value}`;
+      },
     });
 
     const Step1 = compose({ into: Double, from: Src, key: "n" });
     const Step2 = compose({ into: ToString, from: Step1, key: "value" });
 
     const values: string[] = [];
-    const cleanup = Step2.subscribe({}, (v) => { values.push(v as string); });
+    const cleanup = Step2.subscribe({}, (v) => {
+      values.push(v as string);
+    });
 
     assert.deepEqual(values, ["v:2"]);
     assert.equal(doubleCount, 1);
@@ -1488,7 +1602,10 @@ describe("deduplication", () => {
     const Display = component({
       input: z.object({ text: z.string() }),
       output: View,
-      run: ({ text }) => { renderCount++; return <div data-testid="dedup-react">{text}</div>; },
+      run: ({ text }) => {
+        renderCount++;
+        return <div data-testid="dedup-react">{text}</div>;
+      },
     });
 
     const Composed = compose({ into: Display, from: Src, key: "text" });
@@ -1500,12 +1617,16 @@ describe("deduplication", () => {
     const initialRenderCount = renderCount;
 
     // Emit same value — should NOT trigger re-render
-    act(() => { emitFn!("hello"); });
+    act(() => {
+      emitFn!("hello");
+    });
     assert.equal(renderCount, initialRenderCount);
     assert.equal(screen.getByTestId("dedup-react").textContent, "hello");
 
     // Emit different value — should trigger re-render
-    act(() => { emitFn!("world"); });
+    act(() => {
+      emitFn!("world");
+    });
     assert.equal(renderCount, initialRenderCount + 1);
     assert.equal(screen.getByTestId("dedup-react").textContent, "world");
   });
@@ -1580,7 +1701,11 @@ describe("multi-wire compose", () => {
 
   it("unsatisfied inputs bubble up in multi-wire", () => {
     const Card = component({
-      input: z.object({ title: z.string(), count: z.number(), extra: z.boolean() }),
+      input: z.object({
+        title: z.string(),
+        count: z.number(),
+        extra: z.boolean(),
+      }),
       output: View,
       run: ({ title, count, extra }) => (
         <span>
@@ -1644,25 +1769,37 @@ describe("multi-wire compose", () => {
 
     const SrcA = emitter({
       output: z.string(),
-      run: (emit) => { emitA = emit; emit("hello"); return () => {}; },
+      run: (emit) => {
+        emitA = emit;
+        emit("hello");
+        return () => {};
+      },
     });
 
     const SrcB = emitter({
       output: z.number(),
-      run: (emit) => { emitB = emit; emit(1); return () => {}; },
+      run: (emit) => {
+        emitB = emit;
+        emit(1);
+        return () => {};
+      },
     });
 
     const Display = component({
       input: z.object({ msg: z.string(), count: z.number() }),
       output: View,
-      run: ({ msg, count }) => <div data-testid="mw-reactive">{msg}:{count}</div>,
+      run: ({ msg, count }) => (
+        <div data-testid="mw-reactive">{msg}:{count}</div>
+      ),
     });
 
     const Wired = compose({ into: Display, from: { msg: SrcA, count: SrcB } });
 
     // Test via subscribe instead of toReact to avoid act() timing issues
     const values: unknown[] = [];
-    const cleanup = Wired.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Wired.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     // Should have rendered with initial values
     assert.ok(values.length >= 1);
@@ -1699,7 +1836,9 @@ describe("GraftError", () => {
     });
 
     const values: unknown[] = [];
-    const cleanup = Failing.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Failing.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     // GraftLoading first
     assert.equal(values.length, 1);
@@ -1709,8 +1848,11 @@ describe("GraftError", () => {
     await new Promise((r) => setTimeout(r, 50));
     assert.equal(values.length, 2);
     assert.equal(isGraftError(values[1]), true);
-    assert.equal((values[1] as { error: unknown }).error instanceof Error, true);
-    assert.equal(((values[1] as { error: Error }).error).message, "boom");
+    assert.equal(
+      (values[1] as { error: unknown }).error instanceof Error,
+      true,
+    );
+    assert.equal((values[1] as { error: Error }).error.message, "boom");
 
     cleanup();
   });
@@ -1734,7 +1876,9 @@ describe("GraftError", () => {
     const Composed = compose({ into: Display, from: Failing, key: "data" });
 
     const values: unknown[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     // GraftLoading first (short-circuited)
     assert.equal(values.length, 1);
@@ -1811,7 +1955,9 @@ describe("GraftError", () => {
     });
 
     // run() returns the raw promise — should reject normally
-    await assert.rejects(Failing.run({}) as Promise<unknown>, { message: "run rejects" });
+    await assert.rejects(Failing.run({}) as Promise<unknown>, {
+      message: "run rejects",
+    });
   });
 
   it("multi-level GraftError propagation through compose chain", async () => {
@@ -1840,7 +1986,9 @@ describe("GraftError", () => {
     const Step2 = compose({ into: Show, from: Step1, key: "value" });
 
     const values: unknown[] = [];
-    const cleanup = Step2.subscribe({}, (v) => { values.push(v); });
+    const cleanup = Step2.subscribe({}, (v) => {
+      values.push(v);
+    });
 
     // GraftLoading first
     assert.equal(values[0], GraftLoading);
@@ -1849,7 +1997,7 @@ describe("GraftError", () => {
     await new Promise((r) => setTimeout(r, 50));
     assert.equal(values.length, 2);
     assert.equal(isGraftError(values[1]), true);
-    assert.equal(((values[1] as { error: Error }).error).message, "deep error");
+    assert.equal((values[1] as { error: Error }).error.message, "deep error");
 
     cleanup();
   });
@@ -1922,7 +2070,9 @@ describe("boundary validation", () => {
 
     // subscribe path
     const values: number[] = [];
-    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v as number);
+    });
     assert.deepEqual(values, [84]);
     cleanup();
   });

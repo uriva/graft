@@ -1,5 +1,12 @@
 import { z } from "zod/v4";
-import { GraftLoading, graftError, type Cleanup, type GraftError, type GraftComponent, type MaybePromise } from "./types.js";
+import {
+  type Cleanup,
+  type GraftComponent,
+  type GraftError,
+  graftError,
+  GraftLoading,
+  type MaybePromise,
+} from "./types.js";
 
 function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
   return (
@@ -24,20 +31,35 @@ export function component<
   output: z.ZodType<O>;
   run: (props: z.infer<S>) => MaybePromise<O>;
 }): GraftComponent<S, O> {
-  const subscribe = (props: z.infer<S>, cb: (value: O | typeof GraftLoading | GraftError) => void): Cleanup => {
+  const subscribe = (
+    props: z.infer<S>,
+    cb: (value: O | typeof GraftLoading | GraftError) => void,
+  ): Cleanup => {
     let cancelled = false;
     const result = run(props);
     if (isPromise(result)) {
       cb(GraftLoading);
       result.then(
-        (v) => { if (!cancelled) cb(v); },
-        (err) => { if (!cancelled) cb(graftError(err)); },
+        (v) => {
+          if (!cancelled) cb(v);
+        },
+        (err) => {
+          if (!cancelled) cb(graftError(err));
+        },
       );
     } else {
       cb(result);
     }
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   };
 
-  return { _tag: "graft-component", schema: input, outputSchema: output, run, subscribe };
+  return {
+    _tag: "graft-component",
+    schema: input,
+    outputSchema: output,
+    run,
+    subscribe,
+  };
 }

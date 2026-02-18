@@ -1,5 +1,10 @@
 import { z } from "zod/v4";
-import { GraftLoading, type Cleanup, type GraftError, type GraftComponent } from "./types.js";
+import {
+  type Cleanup,
+  type GraftComponent,
+  type GraftError,
+  GraftLoading,
+} from "./types.js";
 
 /**
  * Create a push-based component that emits values over time.
@@ -39,7 +44,10 @@ export function emitter<
 >({ input, output, run }: {
   input?: S;
   output: z.ZodType<O>;
-  run: (emit: (value: O) => void, props: z.infer<S extends undefined ? z.ZodObject<{}> : S>) => Cleanup;
+  run: (
+    emit: (value: O) => void,
+    props: z.infer<S extends undefined ? z.ZodObject<{}> : S>,
+  ) => Cleanup;
 }): GraftComponent<S extends undefined ? z.ZodObject<{}> : S, O> {
   type Schema = S extends undefined ? z.ZodObject<{}> : S;
   const schema = (input ?? z.object({})) as Schema;
