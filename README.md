@@ -67,12 +67,12 @@ Graft eliminates all three by design.
 You describe the wiring directly, focusing on types and composition of
 independent elements, which allows you to keep them decoupled and pure.
 
-Well, is it like haskell or elm? Actually no. Graft is not just another
-functional language. It improves on basic linear composition, you can compose in
-multiple directions (still ending up with simple components, as unsatisfied
-inputs become the new component's props). This is
-[graph programming](https://uriva.github.io/blog/graph-programming.html) applied
-to TypeScript and UI.
+You might wonder if it's like Haskell or Elm. It's actually quite different. It
+improves on linear composition and nesting which are the common patterns in
+functional languages. You can compose in multiple directions, still ending up
+with simple components, as unsatisfied inputs become the new component's props.
+This is [graph programming](https://uriva.github.io/blog/graph-programming.html)
+applied to TypeScript and UI.
 
 ## The tradeoffs
 
