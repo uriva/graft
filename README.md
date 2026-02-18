@@ -164,7 +164,11 @@ setCurrentUser("Alice");
 
 ## instantiate creates isolated copies
 
-`state` and `source` are global by default — every subscriber shares the same cell. This is **the** text field, not **a** text field. `instantiate` creates independent instances, which is how you get local state.
+In React, everything is "a" by default. Each render creates a counter, a form, a piece of state. Multiple instances are the norm — you get isolation for free via hooks.
+
+Graft defaults to "the". `state()` creates the cell. `source()` creates the stream. There is exactly one, and every subscriber sees the same value. Definiteness is the default.
+
+`instantiate()` is how you say "a" — it's the explicit opt-in to indefinite instances. Each subscription gets its own independent copy of the subgraph, with its own state cells and source subscriptions.
 
 ```tsx
 import { instantiate } from "graftjs";
