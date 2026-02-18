@@ -15,7 +15,7 @@ _The smallest API imaginable._
 
 A tiny self sufficient coding and UI framework.
 
-4 functions to learn. Build anything.
+Create entire sophisticated apps with simple state and effect management.
 
 JSX friendly.
 
@@ -37,12 +37,13 @@ npm install graftjs
 
 React components are functions with named parameters (props). When you build a
 UI, you're really building a graph of data dependencies between those functions.
-But React forces you to wire that graph imperatively — passing props down,
+
+But -- React forces you to wire that graph imperatively — passing props down,
 lifting state up, wrapping in Context providers, sprinkling hooks everywhere.
 
-Graft lets you describe the wiring directly. You say what feeds into what, and
-the library builds the component for you. The unsatisfied inputs become the new
-component's props. This is
+Graft on the other hand lets you describe the wiring directly. You say what
+feeds into what, and the library builds the component for you. The unsatisfied
+inputs become the new component's props. This is
 [graph programming](https://uriva.github.io/blog/graph-programming.html) applied
 to UI.
 
@@ -110,7 +111,7 @@ const FormattedPrice = compose({
 });
 ```
 
-Wire multiple inputs at once:
+You can also wire multiple inputs at once:
 
 ```tsx
 const Card = component({
@@ -171,31 +172,36 @@ const App = toReact(
   compose({ into: PriceDisplay, from: LivePrice, key: "displayPrice" }),
 );
 
-// No props needed — everything is wired internally
+// No props needed — everything is already wired
 <App />;
 ```
 
-## state replaces useState
+## state is mutable state, not tied to a component
 
-Returns a `[Component, setter]` tuple. The component emits the current value.
-The setter can be called from anywhere — event handlers, callbacks, outside the
-graph.
+Like `useState`, but it lives in the graph — not inside a component's render
+cycle. Returns a `[Component, setter]` tuple. The component emits the current
+value to any subscriber. The setter can be called from anywhere.
 
 ```tsx
-import { state } from "graftjs";
+import { component, compose, state } from "graftjs";
+import { z } from "zod/v4";
 
-const [CurrentUser, setCurrentUser] = state({
-  schema: z.string(),
-  initial: "anonymous",
+const [Count, setCount] = state({ schema: z.number(), initial: 0 });
+
+const Doubled = component({
+  input: z.object({ n: z.number() }),
+  output: z.number(),
+  run: ({ n }) => n * 2,
 });
 
-const App = toReact(
-  compose({ into: Greeting, from: CurrentUser, key: "name" }),
-);
+const DoubledCount = compose({ into: Doubled, from: Count, key: "n" });
 
-// Renders: Hello, anonymous
-setCurrentUser("Alice");
-// Re-renders: Hello, Alice
+DoubledCount.subscribe({}, (value) => {
+  console.log(value); // 0, then 2, then 4
+});
+
+setCount(1);
+setCount(2);
 ```
 
 ## instantiate creates isolated copies
@@ -345,7 +351,7 @@ The idea comes from
 [graph programming](https://uriva.github.io/blog/graph-programming.html). Graft
 drastically reduces the tokens needed to construct something, and drastically
 reduces the number of possible bugs. It's a runtime library, not a compiler
-plugin. ~400 lines of code, zero dependencies beyond React and zod.
+plugin. Tiny with zero dependencies except zod as the types manager.
 
 ## Loading and error states
 
