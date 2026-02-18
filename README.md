@@ -13,15 +13,29 @@
 
 # graft
 
+Compose React components by wiring outputs into inputs.
+
+`compose({ into, from, key })` feeds `from`'s output into `into`'s input named `key`. The remaining unsatisfied inputs bubble up as the composed component's props. The result is always a standard React component.
+
+No prop drilling. No Context. No useState. No useEffect. No manual subscriptions.
+
 ```
 npm install graftjs
 ```
 
+## Why
+
+React components are functions with named parameters (props). When you build a UI, you're really building a graph of data dependencies between those functions. But React forces you to wire that graph imperatively — passing props down, lifting state up, wrapping in Context providers, sprinkling hooks everywhere.
+
+Graft lets you describe the wiring directly. You say what feeds into what, and the library builds the component for you. The unsatisfied inputs become the new component's props. This is [graph programming](https://uriva.github.io/blog/graph-programming.html) applied to React.
+
 Have you ever chased a stale closure bug through a `useEffect` dependency array? Or watched a parent re-render cascade through child components that didn't even use the state that changed? Or needed to add a parameter deep in a component tree and had to refactor every intermediate component just to thread it through?
 
-Graft eliminates all three. You describe what feeds into what, and the library builds the component. No hooks, no Context, no prop drilling.
+Graft eliminates all three by design.
 
-## A component is a typed function
+## Core concepts
+
+### A component is a typed function
 
 It takes named inputs and produces an output. That's it.
 
@@ -50,7 +64,7 @@ const FormatPrice = component({
 });
 ```
 
-## compose wires components together
+### compose wires components together
 
 `compose({ into, from, key })` feeds `from`'s output into `into`'s input named `key`. The satisfied input disappears. Unsatisfied inputs bubble up as the new component's props.
 
@@ -150,7 +164,7 @@ setCurrentUser("Alice");
 
 ## instantiate creates isolated copies
 
-`state` and `source` are global by default — every subscriber shares the same cell. `instantiate` creates independent instances, which is how you get local state.
+`state` and `source` are global by default — every subscriber shares the same cell. This is **the** text field, not **a** text field. `instantiate` creates independent instances, which is how you get local state.
 
 ```tsx
 import { instantiate } from "graftjs";
@@ -265,7 +279,7 @@ const App = toReact(
 - **Async just works.** Make `run` async and loading states propagate automatically. Errors short-circuit downstream. No `useEffect`, no `isLoading` boilerplate.
 - **Every piece is independently testable.** Components are just functions — call `run()` directly with plain objects, no render harness needed.
 
-The idea comes from [graph programming](https://uriva.github.io/blog/graph-programming.html). It's a runtime library, not a compiler plugin. ~400 lines of code, zero dependencies beyond React and zod.
+The idea comes from [graph programming](https://uriva.github.io/blog/graph-programming.html). Graft drastically reduces the tokens needed to construct something, and drastically reduces the number of possible bugs. It's a runtime library, not a compiler plugin. ~400 lines of code, zero dependencies beyond React and zod.
 
 ## Loading and error states
 
