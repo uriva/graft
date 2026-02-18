@@ -1,4 +1,4 @@
-```
+```text
                                 ▄▄▄▄            
                                 ██▀▀▀     ██     
  ▄███▄██   ██▄████   ▄█████▄  ███████   ███████  
@@ -16,19 +16,18 @@ _The smallest API imaginable._
 Graft is a tiny self sufficient TypeScript programming framework.
 
 - Focuses on non-linear, async friendly composition.
-- JSX friendly.
 - Can be used for data pipelines or to replace React entirely.
-- Compatible with existing react apps
+- Compatible with existing React apps via `toReact`.
 
 The main concepts:
 
-`component` - a runtime typed functions (which can be async).
+`component` - runtime typed functions (which can be async).
 
 `compose` - a way to combine components, ending up with a component again.
 
 For example,
 
-```
+```ts
 compose({ into: target, from: {keyA: sourceA, keyB: sourceB } })
 ```
 
@@ -44,9 +43,11 @@ subscriptions.
 
 To install it -
 
-```
+```sh
 npm install graftjs
 ```
+
+[GitHub](https://github.com/uriva/graft) | [npm](https://www.npmjs.com/package/graftjs)
 
 ## Why
 
@@ -166,7 +167,7 @@ const App = compose({
 });
 ```
 
-## toReact converts to a regular React component
+### toReact converts to a regular React component
 
 Existing react apps can adopt gradually - `toReact` gives you a standard
 `React.FC`.
@@ -180,7 +181,7 @@ const App = toReact(FormattedPrice);
 <App price={42000} />;
 ```
 
-## emitters
+### emitters
 
 In React you'd use `useEffect` + `useState` for a WebSocket, a timer, or a
 browser API. In graft, that's an `emitter` — a component that pushes values over
@@ -211,7 +212,7 @@ const App = toReact(
 <App />;
 ```
 
-## state is mutable state, not tied to a component
+### state is mutable state, not tied to a component
 
 Like `useState`, but it lives in the graph — not inside a component's render
 cycle. Returns a `[Component, setter]` tuple. The component emits the current
@@ -239,7 +240,7 @@ setCount(1);
 setCount(2);
 ```
 
-## instantiate creates isolated copies
+### instantiate creates isolated copies
 
 In React, everything is "a" by default. Each render creates a counter, a form, a
 piece of state. Multiple instances are the norm — you get isolation for free via
