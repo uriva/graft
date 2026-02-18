@@ -13,16 +13,16 @@ _The smallest API imaginable._
 
 # graft
 
-Graft is sort of a programming language, but you can also think of it a tiny,
-self sufficient TypeScript programming framework.
+Graft is a tiny self sufficient TypeScript programming framework.
 
-It focuses on non-linear, async friendly composition.
 
-It is jsx friendly.
+- focuses on non-linear, async friendly composition.
 
-Use it for UI or anything.
+- jsx friendly.
 
-You can replace React entirely, or just a part of your app (it is compatible).
+- can be used for data pipelines or to replace React entirely
+
+- compatible with existing react apps
 
 The main concepts:
 
