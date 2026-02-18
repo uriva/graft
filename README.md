@@ -35,22 +35,32 @@ npm install graftjs
 
 ## Why
 
-React components are functions with named parameters (props). When you build a
-UI, you're really building a graph of data dependencies between those functions.
+Components are functions with named parameters (props). When you build a UI,
+you're really building a graph of data dependencies between those functions.
 
-But -- React forces you to wire that graph imperatively — passing props down,
-lifting state up, wrapping in Context providers, sprinkling hooks everywhere.
+React forces you to do two things:
 
-Graft on the other hand lets you describe the wiring directly. You say what
-feeds into what, and the library builds the component for you. The unsatisfied
-inputs become the new component's props. This is
+1. Sprinkle hooks everywhere, ending up with impure components or things like
+   `useEffect` dependencies array, or weird hook rules.
+2. Nest components within each other, coupling views and requiring prop
+   drilling.
+
+Too much magic, too coupled and too hard to reason about.
+
+Graft on the other hand lets you describe the wiring directly. You focus on
+types and composition of independent elements.
+
+As opposed of linear composition you can compose in multiple directions and
+still end pu with simple components, as unsatisfied inputs become the new
+component's props. This is
 [graph programming](https://uriva.github.io/blog/graph-programming.html) applied
 to UI.
 
-Have you ever chased a stale closure bug through a `useEffect` dependency array?
-Or watched a parent re-render cascade through child components that didn't even
-use the state that changed? Or needed to add a parameter deep in a component
-tree and had to refactor every intermediate component just to thread it through?
+If you ever chased a stale closure bug through a `useEffect` dependency array,
+or watched a parent re-render cascade through child components that didn't even
+use the state that changed, or needed to add a parameter deep in a component
+tree and had to refactor every intermediate component just to thread it through,
+then you know.
 
 Graft eliminates all three by design, is more testable and composable, and
 easier to learn.
@@ -418,16 +428,3 @@ dependencies at runtime. It would make the graph shape dynamic rather than
 static, which is a meaningful complexity increase, so it's not currently planned
 — but it's a natural extension if demand for conditional upstream computation
 arises.
-
-## Install
-
-```
-npm install graftjs
-```
-
-Requires React 18+ as a peer dependency. Uses [zod v4](https://zod.dev)
-(`zod/v4` import) for schemas.
-
-## License
-
-MIT
