@@ -134,7 +134,8 @@ function composeSingle<
     const fromOutput = from.run(fromInput as z.infer<SB>);
 
     const runInto = (resolvedFromOutput: OB): MaybePromise<OA> => {
-      return into.run(buildIntoInput(resolvedFromOutput) as z.infer<SA>);
+      const validated = from.outputSchema.parse(resolvedFromOutput);
+      return into.run(buildIntoInput(validated) as z.infer<SA>);
     };
 
     if (isPromise(fromOutput)) {
@@ -177,9 +178,12 @@ function composeSingle<
           return;
         }
 
-        // Subscribe to into with the new from value
+        // Validate from's output at the boundary
+        const validated = from.outputSchema.parse(fromValue);
+
+        // Subscribe to into with the validated from value
         intoCleanup = into.subscribe(
-          buildIntoInput(fromValue) as z.infer<SA>,
+          buildIntoInput(validated) as z.infer<SA>,
           (intoValue: OA | typeof GraftLoading | GraftError) => {
             if (!disposed) cb(intoValue);
           },

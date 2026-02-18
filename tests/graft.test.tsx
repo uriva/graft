@@ -1854,3 +1854,98 @@ describe("GraftError", () => {
     cleanup();
   });
 });
+
+describe("boundary validation", () => {
+  it("run path: throws ZodError when from's run returns wrong type", () => {
+    // from claims to output z.string() but actually returns a number
+    const Bad = component({
+      input: z.object({}),
+      output: z.string(),
+      run: () => 42 as unknown as string,
+    });
+
+    const Consumer = component({
+      input: z.object({ text: z.string() }),
+      output: z.string(),
+      run: ({ text }) => text.toUpperCase(),
+    });
+
+    const Composed = compose({ into: Consumer, from: Bad, key: "text" });
+
+    assert.throws(
+      () => Composed.run({}),
+      (err: unknown) => err instanceof z.ZodError,
+    );
+  });
+
+  it("subscribe path: throws when from emits wrong type", () => {
+    // source claims z.string() but emits a number
+    const Bad = source({
+      output: z.string(),
+      run: (emit) => {
+        (emit as (v: unknown) => void)(123);
+        return () => {};
+      },
+    });
+
+    const Consumer = component({
+      input: z.object({ text: z.string() }),
+      output: z.string(),
+      run: ({ text }) => text.toUpperCase(),
+    });
+
+    const Composed = compose({ into: Consumer, from: Bad, key: "text" });
+
+    assert.throws(
+      () => Composed.subscribe({}, () => {}),
+      (err: unknown) => err instanceof z.ZodError,
+    );
+  });
+
+  it("valid values pass through boundary without error", () => {
+    const Good = component({
+      input: z.object({}),
+      output: z.number(),
+      run: () => 42,
+    });
+
+    const Double = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 2,
+    });
+
+    const Composed = compose({ into: Double, from: Good, key: "n" });
+
+    // run path
+    assert.equal(Composed.run({}), 84);
+
+    // subscribe path
+    const values: number[] = [];
+    const cleanup = Composed.subscribe({}, (v) => { values.push(v as number); });
+    assert.deepEqual(values, [84]);
+    cleanup();
+  });
+
+  it("boundary validates object shapes", () => {
+    // from claims { x: number, y: number } but returns { x: number }
+    const Bad = component({
+      input: z.object({}),
+      output: z.object({ x: z.number(), y: z.number() }),
+      run: () => ({ x: 1 }) as unknown as { x: number; y: number },
+    });
+
+    const Consumer = component({
+      input: z.object({ point: z.object({ x: z.number(), y: z.number() }) }),
+      output: z.number(),
+      run: ({ point }) => point.x + point.y,
+    });
+
+    const Composed = compose({ into: Consumer, from: Bad, key: "point" });
+
+    assert.throws(
+      () => Composed.run({}),
+      (err: unknown) => err instanceof z.ZodError,
+    );
+  });
+});
