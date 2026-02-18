@@ -15,10 +15,10 @@ _The smallest API imaginable._
 
 Graft is a tiny self sufficient TypeScript programming framework.
 
-- focuses on non-linear, async friendly composition.
-- jsx friendly.
-- can be used for data pipelines or to replace React entirely
-- compatible with existing react apps
+- Focuses on non-linear, async friendly composition.
+- JSX friendly.
+- Can be used for data pipelines or to replace React entirely.
+- Compatible with existing react apps
 
 The main concepts:
 
@@ -26,12 +26,18 @@ The main concepts:
 
 `compose` - a way to combine components, ending up with a component again.
 
-`compose({ into: target, from: {keyA: sourceA, keyB: sourceB } })` connects
-between 3 components. The remaining unsatisfied inputs of `target`, `sourceA`
-and `sourceB` bubble up as the composed component's new required inputs. The
-result is (again) a component with a set of known typed inputs and output.
+For example,
 
-Turns out this is enough to do everything.
+```
+compose({ into: target, from: {keyA: sourceA, keyB: sourceB } })
+```
+
+connects between 3 components. The remaining unsatisfied inputs of `target`,
+`sourceA` and `sourceB` bubble up as the composed component's new required
+inputs. The result is (again) a component with a set of known typed inputs and
+output.
+
+Turns out just this lets you do most things
 
 No prop drilling. No Context. No useState. No useEffect. No manual
 subscriptions.
