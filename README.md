@@ -13,23 +13,29 @@ _The smallest API imaginable._
 
 # graft
 
-In an ideal world, Graft would be a programming language, but for now you can
-also think of it a tiny, self sufficient TypeScript programming framework.
+Graft is sort of a programming language, but you can also think of it a tiny,
+self sufficient TypeScript programming framework.
 
-Graft focuses on non-linear, async friendly composition.
+It focuses on non-linear, async friendly composition.
 
-Use it for UI or anything. E.g. you can replace React entirely, or just a part
-of your app (it is compatible).
+It is jsx friendly.
 
-It is JSX friendly.
+Use it for UI or anything.
 
-The main concept is `compose` and it is used to wire `component`s, which are
-just runtime typed functions.
+You can replace React entirely, or just a part of your app (it is compatible).
+
+The main concepts:
+
+`component` - a runtime typed functions (which can be async).
+
+`compose` - a way to combine components, ending up with a component again.
 
 `compose({ into: target, from: {keyA: sourceA, keyB: sourceB } })` connects
-between 3 components. The remaining unsatisfied inputs of `target` bubble up as
-the composed component's new required inputs. The result is again, always a
-simple component with a set of known typed inputs and output.
+between 3 components. The remaining unsatisfied inputs of `target`, `sourceA`
+and `sourceB` bubble up as the composed component's new required inputs. The
+result is (again) a component with a set of known typed inputs and output.
+
+Turns out this is enough to do everything.
 
 No prop drilling. No Context. No useState. No useEffect. No manual
 subscriptions.
@@ -44,30 +50,30 @@ npm install graftjs
 
 Graft solves problems that arise in UI (e.g. in React) and non-UI programming.
 
-React forces you to do two things:
+React is great but has two main issues:
 
-1. Sprinkle hooks everywhere, ending up with impure components or things like
-   `useEffect` dependencies array, or weird hook rules.
-2. Nest components within each other, coupling views which leads to prop
+1. You have to sprinkle hooks everywhere, ending up with impure components or
+   things like `useEffect` dependencies array, or weird hook rules.
+2. You nest components within each other, coupling views which leads to prop
    drilling / signature duplication.
 
-Graft on the other hand lets you describe the wiring directly. You focus on
-types and composition of independent elements.
+Have you ever chased a stale closure bug through a `useEffect` dependency array?
+Or watched a parent re-render cascade through child components that didn't even
+use the state that changed? Or needed to add a parameter deep in a component
+tree and had to refactor every intermediate component just to thread it through?
 
-As opposed of linear composition you can compose in multiple directions and
-still end pu with simple components, as unsatisfied inputs become the new
-component's props. This is
+Graft eliminates all three by design, is more testable, composable and easier to
+learn.
+
+You describe the wiring directly, focusing on types and composition of
+independent elements, which allows you to keep them decoupled and pure.
+
+Well, is it like haskell or elm? Actually no. Graft is not just another
+functional language. It improves on basic linear composition, you can compose in
+multiple directions (still ending up with simple components, as unsatisfied
+inputs become the new component's props). This is
 [graph programming](https://uriva.github.io/blog/graph-programming.html) applied
-to UI.
-
-If you ever chased a stale closure bug through a `useEffect` dependency array,
-or watched a parent re-render cascade through child components that didn't even
-use the state that changed, or needed to add a parameter deep in a component
-tree and had to refactor every intermediate component just to thread it through,
-then you know.
-
-Graft eliminates all three by design, is more testable and composable, and
-easier to learn.
+to TypeScript and UI.
 
 ## Core concepts
 
