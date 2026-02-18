@@ -1,23 +1,33 @@
 ```
-                                 ▄▄▄▄            
-                                 ██▀▀▀     ██     
-  ▄███▄██   ██▄████   ▄█████▄  ███████   ███████  
- ██▀  ▀██   ██▀       ▀ ▄▄▄██    ██        ██     
- ██    ██   ██       ▄██▀▀▀██    ██        ██     
- ▀██▄▄███   ██       ██▄▄▄███    ██        ██▄▄▄  
-  ▄▀▀▀ ██   ▀▀        ▀▀▀▀ ▀▀    ▀▀         ▀▀▀▀  
-  ▀████▀▀ 
+                                ▄▄▄▄            
+                                ██▀▀▀     ██     
+ ▄███▄██   ██▄████   ▄█████▄  ███████   ███████  
+██▀  ▀██   ██▀       ▀ ▄▄▄██    ██        ██     
+██    ██   ██       ▄██▀▀▀██    ██        ██     
+▀██▄▄███   ██       ██▄▄▄███    ██        ██▄▄▄  
+ ▄▀▀▀ ██   ▀▀        ▀▀▀▀ ▀▀    ▀▀         ▀▀▀▀  
+ ▀████▀▀
 ```
 
-*The smallest API imaginable.*
+_The smallest API imaginable._
 
 # graft
 
-Compose React components by wiring outputs into inputs.
+A tiny self sufficient coding and UI framework.
 
-`compose({ into, from, key })` feeds `from`'s output into `into`'s input named `key`. The remaining unsatisfied inputs bubble up as the composed component's props. The result is always a standard React component.
+4 functions to learn. Build anything.
 
-No prop drilling. No Context. No useState. No useEffect. No manual subscriptions.
+JSX friendly.
+
+Focused on wiring outputs into inputs as a graph, nothing else.
+
+`compose({ into: target, from: {keyA: sourceA, keyB: sourceB } })` connects
+between 3 components. The remaining unsatisfied inputs of `target` bubble up as
+the composed component's new required inputs. The result is again, always a
+simple component with a set of known typed inputs and output.
+
+No prop drilling. No Context. No useState. No useEffect. No manual
+subscriptions.
 
 ```
 npm install graftjs
@@ -25,13 +35,24 @@ npm install graftjs
 
 ## Why
 
-React components are functions with named parameters (props). When you build a UI, you're really building a graph of data dependencies between those functions. But React forces you to wire that graph imperatively — passing props down, lifting state up, wrapping in Context providers, sprinkling hooks everywhere.
+React components are functions with named parameters (props). When you build a
+UI, you're really building a graph of data dependencies between those functions.
+But React forces you to wire that graph imperatively — passing props down,
+lifting state up, wrapping in Context providers, sprinkling hooks everywhere.
 
-Graft lets you describe the wiring directly. You say what feeds into what, and the library builds the component for you. The unsatisfied inputs become the new component's props. This is [graph programming](https://uriva.github.io/blog/graph-programming.html) applied to React.
+Graft lets you describe the wiring directly. You say what feeds into what, and
+the library builds the component for you. The unsatisfied inputs become the new
+component's props. This is
+[graph programming](https://uriva.github.io/blog/graph-programming.html) applied
+to UI.
 
-Have you ever chased a stale closure bug through a `useEffect` dependency array? Or watched a parent re-render cascade through child components that didn't even use the state that changed? Or needed to add a parameter deep in a component tree and had to refactor every intermediate component just to thread it through?
+Have you ever chased a stale closure bug through a `useEffect` dependency array?
+Or watched a parent re-render cascade through child components that didn't even
+use the state that changed? Or needed to add a parameter deep in a component
+tree and had to refactor every intermediate component just to thread it through?
 
-Graft eliminates all three by design.
+Graft eliminates all three by design, is more testable and composable, and
+easier to learn.
 
 ## Core concepts
 
@@ -50,7 +71,8 @@ const Greeting = component({
 });
 ```
 
-The output doesn't have to be JSX. A component that returns data is just a transform:
+The output doesn't have to be JSX. A component that returns data is just a
+transform:
 
 ```tsx
 const FormatPrice = component({
@@ -66,7 +88,9 @@ const FormatPrice = component({
 
 ### compose wires components together
 
-`compose({ into, from, key })` feeds `from`'s output into `into`'s input named `key`. The satisfied input disappears. Unsatisfied inputs bubble up as the new component's props.
+`compose({ into, from, key })` feeds `from`'s output into `into`'s input named
+`key`. The satisfied input disappears. Unsatisfied inputs bubble up as the new
+component's props.
 
 ```tsx
 import { compose } from "graftjs";
@@ -92,7 +116,12 @@ Wire multiple inputs at once:
 const Card = component({
   input: z.object({ title: z.string(), body: z.string() }),
   output: View,
-  run: ({ title, body }) => <div><h2>{title}</h2><p>{body}</p></div>,
+  run: ({ title, body }) => (
+    <div>
+      <h2>{title}</h2>
+      <p>{body}</p>
+    </div>
+  ),
 });
 
 const App = compose({
@@ -103,7 +132,8 @@ const App = compose({
 
 ## toReact converts to a regular React component
 
-When all inputs are satisfied (or you want the remaining ones as props), `toReact` gives you a standard `React.FC`.
+Existing react apps can adopt gradually - `toReact` gives you a standard
+`React.FC`.
 
 ```tsx
 import { toReact } from "graftjs";
@@ -111,12 +141,14 @@ import { toReact } from "graftjs";
 const App = toReact(FormattedPrice);
 
 // TypeScript knows this needs { price: number }
-<App price={42000} />
+<App price={42000} />;
 ```
 
-## emitter replaces useEffect
+## emitters
 
-In React you'd use `useEffect` + `useState` for a WebSocket, a timer, or a browser API. In graft, that's an `emitter` — a component that pushes values over time. Everything downstream re-runs automatically.
+In React you'd use `useEffect` + `useState` for a WebSocket, a timer, or a
+browser API. In graft, that's an `emitter` — a component that pushes values over
+time. Everything downstream re-runs automatically.
 
 ```tsx
 import { emitter } from "graftjs";
@@ -135,15 +167,19 @@ Wire it into the graph and you have a live-updating UI with no hooks:
 
 ```tsx
 const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
-const App = toReact(compose({ into: PriceDisplay, from: LivePrice, key: "displayPrice" }));
+const App = toReact(
+  compose({ into: PriceDisplay, from: LivePrice, key: "displayPrice" }),
+);
 
 // No props needed — everything is wired internally
-<App />
+<App />;
 ```
 
 ## state replaces useState
 
-Returns a `[Component, setter]` tuple. The component emits the current value. The setter can be called from anywhere — event handlers, callbacks, outside the graph.
+Returns a `[Component, setter]` tuple. The component emits the current value.
+The setter can be called from anywhere — event handlers, callbacks, outside the
+graph.
 
 ```tsx
 import { state } from "graftjs";
@@ -164,11 +200,17 @@ setCurrentUser("Alice");
 
 ## instantiate creates isolated copies
 
-In React, everything is "a" by default. Each render creates a counter, a form, a piece of state. Multiple instances are the norm — you get isolation for free via hooks.
+In React, everything is "a" by default. Each render creates a counter, a form, a
+piece of state. Multiple instances are the norm — you get isolation for free via
+hooks.
 
-Graft defaults to "the". `state()` creates the cell. `emitter()` creates the stream. There is exactly one, and every subscriber sees the same value. Definiteness is the default.
+Graft defaults to "the". `state()` creates the cell. `emitter()` creates the
+stream. There is exactly one, and every subscriber sees the same value.
+Definiteness is the default.
 
-`instantiate()` is how you say "a" — it's the explicit opt-in to indefinite instances. Each subscription gets its own independent copy of the subgraph, with its own state cells and emitter subscriptions.
+`instantiate()` is how you say "a" — it's the explicit opt-in to indefinite
+instances. Each subscription gets its own independent copy of the subgraph, with
+its own state cells and emitter subscriptions.
 
 ```tsx
 import { instantiate } from "graftjs";
@@ -197,7 +239,8 @@ const EmailField = instantiate(TextField);
 
 ## Full example
 
-A live crypto price card. Price streams over WebSocket, coin name is fetched async, both feed into a card layout.
+A live crypto price card. Price streams over WebSocket, coin name is fetched
+async, both feed into a card layout.
 
 ```mermaid
 graph BT
@@ -239,7 +282,8 @@ const FormatPrice = component({
   input: z.object({ price: z.number() }),
   output: z.string(),
   run: ({ price }) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price),
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+      .format(price),
 });
 
 const Header = component({
@@ -263,11 +307,14 @@ const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
 const NamedHeader = compose({ into: Header, from: CoinName, key: "name" });
 
 const App = toReact(
-  compose({ into: PriceCard, from: { displayPrice: LivePrice, header: NamedHeader } }),
+  compose({
+    into: PriceCard,
+    from: { displayPrice: LivePrice, header: NamedHeader },
+  }),
 );
 
 // One prop left — everything else is wired internally
-<App coinId="bitcoin" />
+<App coinId="bitcoin" />;
 ```
 
 <p align="center">
@@ -276,22 +323,42 @@ const App = toReact(
 
 ## What you get
 
-- **No dependency arrays.** There are no hooks, so there are no stale closures and no rules-of-hooks footguns.
-- **No unnecessary re-renders.** Value changes only propagate along explicit `compose()` edges. If emitter A feeds component X and emitter B feeds component Y, A changing has zero effect on Y. This isn't an optimization — graft simply doesn't have a mechanism to cascade re-renders.
-- **No prop drilling.** Need to wire a data source into a deeply nested component? Just `compose()` it directly. No touching the components in between.
-- **Runtime type safety.** Every `compose` boundary validates with zod. A type mismatch gives you a clear `ZodError` at the boundary where it happened — not a silent `undefined` propagating through your tree.
-- **Async just works.** Make `run` async and loading states propagate automatically. Errors short-circuit downstream. No `useEffect`, no `isLoading` boilerplate.
-- **Every piece is independently testable.** Components are just functions — call `run()` directly with plain objects, no render harness needed.
+- **No dependency arrays.** There are no hooks, so there are no stale closures
+  and no rules-of-hooks footguns.
+- **No unnecessary re-renders.** Value changes only propagate along explicit
+  `compose()` edges. If emitter A feeds component X and emitter B feeds
+  component Y, A changing has zero effect on Y. This isn't an optimization —
+  graft simply doesn't have a mechanism to cascade re-renders.
+- **No prop drilling.** Need to wire a data source into a deeply nested
+  component? Just `compose()` it directly. No touching the components in
+  between.
+- **Runtime type safety.** Every `compose` boundary validates with zod. A type
+  mismatch gives you a clear `ZodError` at the boundary where it happened — not
+  a silent `undefined` propagating through your tree.
+- **Async just works.** Make `run` async and loading states propagate
+  automatically. Errors short-circuit downstream. No `useEffect`, no `isLoading`
+  boilerplate.
+- **Every piece is independently testable.** Components are just functions —
+  call `run()` directly with plain objects, no render harness needed.
 
-The idea comes from [graph programming](https://uriva.github.io/blog/graph-programming.html). Graft drastically reduces the tokens needed to construct something, and drastically reduces the number of possible bugs. It's a runtime library, not a compiler plugin. ~400 lines of code, zero dependencies beyond React and zod.
+The idea comes from
+[graph programming](https://uriva.github.io/blog/graph-programming.html). Graft
+drastically reduces the tokens needed to construct something, and drastically
+reduces the number of possible bugs. It's a runtime library, not a compiler
+plugin. ~400 lines of code, zero dependencies beyond React and zod.
 
 ## Loading and error states
 
-When a component is async, graft handles the in-between time with two sentinels that flow through the graph like regular data.
+When a component is async, graft handles the in-between time with two sentinels
+that flow through the graph like regular data.
 
-**`GraftLoading`** — emitted when a value isn't available yet. Async components emit it immediately, then the resolved value. Emitters emit it until their first `emit()` call. `compose` short-circuits on loading — downstream `run` functions aren't called. `toReact` renders `null`.
+**`GraftLoading`** — emitted when a value isn't available yet. Async components
+emit it immediately, then the resolved value. Emitters emit it until their first
+`emit()` call. `compose` short-circuits on loading — downstream `run` functions
+aren't called. `toReact` renders `null`.
 
-**`GraftError`** — wraps a caught error from an async rejection. Like loading, it short-circuits through `compose`. `toReact` renders `null`.
+**`GraftError`** — wraps a caught error from an async rejection. Like loading,
+it short-circuits through `compose`. `toReact` renders `null`.
 
 ```tsx
 import { GraftLoading, isGraftError } from "graftjs";
@@ -322,7 +389,29 @@ AsyncData.subscribe({ id: "123" }, (value) => {
 
 ## Deduplication
 
-`compose` deduplicates emissions from `from` using reference equality (`===`). If `from` emits the same value twice in a row, `into`'s `run` isn't called and nothing propagates downstream. This means an emitter spamming the same primitive is a no-op, and calling a state setter with the current value is free.
+`compose` deduplicates emissions from `from` using reference equality (`===`).
+If `from` emits the same value twice in a row, `into`'s `run` isn't called and
+nothing propagates downstream. This means an emitter spamming the same primitive
+is a no-op, and calling a state setter with the current value is free.
+
+## Eagerness and future laziness
+
+The graph is currently eager — once a component is subscribed to, everything
+upstream runs, even if the `run` function only uses some of its inputs
+conditionally. With `toReact`, React's mount/unmount lifecycle handles this
+naturally: unmounted components have no active subscriptions, so their upstream
+branches don't run. But the graph itself doesn't know which inputs a `run` will
+actually read.
+
+A potential future direction is lazy evaluation: instead of receiving a resolved
+object, `run` would receive a `get` function —
+`run: async (get) => { const price = await get("price"); ... }`. Branches would
+only activate when `get` is called, and the set of active subscriptions would be
+tracked and updated per invocation. This is similar to how MobX and Vue track
+dependencies at runtime. It would make the graph shape dynamic rather than
+static, which is a meaningful complexity increase, so it's not currently planned
+— but it's a natural extension if demand for conditional upstream computation
+arises.
 
 ## Install
 
@@ -330,7 +419,8 @@ AsyncData.subscribe({ id: "123" }, (value) => {
 npm install graftjs
 ```
 
-Requires React 18+ as a peer dependency. Uses [zod v4](https://zod.dev) (`zod/v4` import) for schemas.
+Requires React 18+ as a peer dependency. Uses [zod v4](https://zod.dev)
+(`zod/v4` import) for schemas.
 
 ## License
 
