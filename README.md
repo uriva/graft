@@ -62,8 +62,7 @@ Or watched a parent re-render cascade through child components that didn't even
 use the state that changed? Or needed to add a parameter deep in a component
 tree and had to refactor every intermediate component just to thread it through?
 
-Graft eliminates all three by design, is more testable, composable and easier to
-learn.
+Graft eliminates all three by design.
 
 You describe the wiring directly, focusing on types and composition of
 independent elements, which allows you to keep them decoupled and pure.
