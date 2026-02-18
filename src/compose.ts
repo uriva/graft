@@ -42,15 +42,15 @@ function splitProps<
 }
 
 /**
- * compose({ into, from, key }):
- *   - into: a component with inputs SA that produces OA
- *   - from: a component with inputs SB that produces OB
- *   - key: an input name of `into` whose type matches OB
- *   - Result: a component whose inputs are SA minus key, plus SB,
- *     and whose output is OA
+ * compose({ into, from, key }) — single-wire form:
+ *   Wires `from`'s output into `into`'s input named `key`.
  *
- * If either `from` or `into` is async, the composed run is async.
- * `from`'s output feeds into `into[key]`, remaining params bubble up.
+ * compose({ into, from: { k1: A, k2: B, ... } }) — multi-wire form:
+ *   Wires multiple components into `into` at once. Each key in `from`
+ *   names an input of `into`, and its value is the component that provides it.
+ *   Equivalent to chaining single-wire compose calls.
+ *
+ * In both forms, unsatisfied inputs bubble up as the composed component's props.
  *
  * subscribe() propagates reactivity: subscribes to `from`, and whenever
  * `from` emits, re-subscribes to `into` with the new value, forwarding
@@ -60,6 +60,17 @@ function splitProps<
  * it passes the sentinel directly to the outer callback without calling
  * `into`'s run/subscribe.
  */
+
+// Multi-wire overload
+export function compose<
+  SA extends z.ZodObject<z.ZodRawShape>,
+  OA,
+>({ into, from }: {
+  into: GraftComponent<SA, OA>;
+  from: Record<string, GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>>;
+}): GraftComponent<z.ZodObject<z.ZodRawShape>, OA>;
+
+// Single-wire overload
 export function compose<
   SA extends z.ZodObject<z.ZodRawShape>,
   SB extends z.ZodObject<z.ZodRawShape>,
@@ -73,14 +84,48 @@ export function compose<
 }): GraftComponent<
   z.ZodObject<Omit<SA["shape"], K> & SB["shape"]>,
   OA
-> {
+>;
+
+// Implementation
+export function compose({ into, from, key }: {
+  into: GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>;
+  from: GraftComponent<z.ZodObject<z.ZodRawShape>, unknown> | Record<string, GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>>;
+  key?: string;
+}): GraftComponent<z.ZodObject<z.ZodRawShape>, unknown> {
+  // Multi-wire form: from is a Record<string, GraftComponent>
+  if (!key && typeof from === "object" && from !== null && (from as { _tag?: string })._tag !== "graft-component") {
+    const entries = Object.entries(from as Record<string, GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>>);
+    if (entries.length === 0) return into;
+    let result: GraftComponent<z.ZodObject<z.ZodRawShape>, unknown> = into;
+    for (const [k, provider] of entries) {
+      result = composeSingle(result, provider, k);
+    }
+    return result;
+  }
+
+  // Single-wire form
+  return composeSingle(
+    into,
+    from as GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>,
+    key!,
+  );
+}
+
+function composeSingle<
+  SA extends z.ZodObject<z.ZodRawShape>,
+  SB extends z.ZodObject<z.ZodRawShape>,
+  OA,
+  OB,
+>(
+  into: GraftComponent<SA, OA>,
+  from: GraftComponent<SB, OB>,
+  key: string,
+): GraftComponent<z.ZodObject<z.ZodRawShape>, OA> {
   // Build the new schema: into's shape minus key, plus from's shape
   const intoShape = { ...into.schema.shape };
   delete (intoShape as Record<string, unknown>)[key];
   const newShape = { ...intoShape, ...from.schema.shape };
-  const newSchema = z.object(newShape) as z.ZodObject<
-    Omit<SA["shape"], K> & SB["shape"]
-  >;
+  const newSchema = z.object(newShape) as z.ZodObject<z.ZodRawShape>;
 
   const run = (props: z.infer<typeof newSchema>): MaybePromise<OA> => {
     const parsed = newSchema.parse(props) as Record<string, unknown>;

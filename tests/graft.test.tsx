@@ -1511,6 +1511,182 @@ describe("deduplication", () => {
   });
 });
 
+describe("multi-wire compose", () => {
+  it("wires multiple inputs at once", () => {
+    const Card = component({
+      input: z.object({ title: z.string(), count: z.number() }),
+      output: View,
+      run: ({ title, count }) => (
+        <div data-testid="multi-wire">
+          {title}: {count}
+        </div>
+      ),
+    });
+
+    const Title = component({
+      input: z.object({}),
+      output: z.string(),
+      run: () => "Hello",
+    });
+
+    const Count = component({
+      input: z.object({}),
+      output: z.number(),
+      run: () => 42,
+    });
+
+    const Wired = compose({
+      into: Card,
+      from: { title: Title, count: Count },
+    });
+
+    // All inputs satisfied — no remaining props
+    assert.deepEqual(Object.keys(Wired.schema.shape).sort(), []);
+
+    // run works
+    const el = Wired.run({});
+    assert.ok(el);
+  });
+
+  it("multi-wire renders correctly via toReact", () => {
+    const Card = component({
+      input: z.object({ name: z.string(), age: z.number() }),
+      output: View,
+      run: ({ name, age }) => (
+        <span data-testid="mw-render">
+          {name} is {age}
+        </span>
+      ),
+    });
+
+    const Name = component({
+      input: z.object({}),
+      output: z.string(),
+      run: () => "Alice",
+    });
+
+    const Age = component({
+      input: z.object({}),
+      output: z.number(),
+      run: () => 30,
+    });
+
+    const Wired = compose({ into: Card, from: { name: Name, age: Age } });
+    const App = toReact(Wired);
+
+    render(<App />);
+    assert.equal(screen.getByTestId("mw-render").textContent, "Alice is 30");
+  });
+
+  it("unsatisfied inputs bubble up in multi-wire", () => {
+    const Card = component({
+      input: z.object({ title: z.string(), count: z.number(), extra: z.boolean() }),
+      output: View,
+      run: ({ title, count, extra }) => (
+        <span>
+          {title}: {count} ({String(extra)})
+        </span>
+      ),
+    });
+
+    const Title = component({
+      input: z.object({}),
+      output: z.string(),
+      run: () => "Hi",
+    });
+
+    // Only wire title — count and extra should bubble up
+    const Partial = compose({ into: Card, from: { title: Title } });
+    const keys = Object.keys(Partial.schema.shape).sort();
+    assert.deepEqual(keys, ["count", "extra"]);
+  });
+
+  it("multi-wire with from components that have their own inputs", () => {
+    const Card = component({
+      input: z.object({ label: z.string(), value: z.number() }),
+      output: View,
+      run: ({ label, value }) => (
+        <span data-testid="mw-bubble">
+          {label}={value}
+        </span>
+      ),
+    });
+
+    const MakeLabel = component({
+      input: z.object({ prefix: z.string() }),
+      output: z.string(),
+      run: ({ prefix }) => `${prefix}:`,
+    });
+
+    const MakeValue = component({
+      input: z.object({ n: z.number() }),
+      output: z.number(),
+      run: ({ n }) => n * 10,
+    });
+
+    const Wired = compose({
+      into: Card,
+      from: { label: MakeLabel, value: MakeValue },
+    });
+
+    // prefix and n should bubble up
+    const keys = Object.keys(Wired.schema.shape).sort();
+    assert.deepEqual(keys, ["n", "prefix"]);
+
+    const App = toReact(Wired);
+    render(<App prefix="count" n={5} />);
+    assert.equal(screen.getByTestId("mw-bubble").textContent, "count:=50");
+  });
+
+  it("multi-wire with reactive sources", async () => {
+    let emitA: ((v: string) => void) | null = null;
+    let emitB: ((v: number) => void) | null = null;
+
+    const SrcA = source({
+      output: z.string(),
+      run: (emit) => { emitA = emit; emit("hello"); return () => {}; },
+    });
+
+    const SrcB = source({
+      output: z.number(),
+      run: (emit) => { emitB = emit; emit(1); return () => {}; },
+    });
+
+    const Display = component({
+      input: z.object({ msg: z.string(), count: z.number() }),
+      output: View,
+      run: ({ msg, count }) => <div data-testid="mw-reactive">{msg}:{count}</div>,
+    });
+
+    const Wired = compose({ into: Display, from: { msg: SrcA, count: SrcB } });
+
+    // Test via subscribe instead of toReact to avoid act() timing issues
+    const values: unknown[] = [];
+    const cleanup = Wired.subscribe({}, (v) => { values.push(v); });
+
+    // Should have rendered with initial values
+    assert.ok(values.length >= 1);
+
+    // Emit new value from SrcA
+    emitA!("world");
+    // Emit new value from SrcB
+    emitB!(99);
+
+    cleanup();
+  });
+
+  it("empty from record returns into unchanged", () => {
+    const Card = component({
+      input: z.object({ x: z.number() }),
+      output: View,
+      run: ({ x }) => <span>{x}</span>,
+    });
+
+    const Same = compose({ into: Card, from: {} });
+    assert.deepEqual(Object.keys(Same.schema.shape), ["x"]);
+  });
+});
+
 describe("GraftError", () => {
   it("async component rejection produces GraftError via subscribe", async () => {
     const Failing = component({

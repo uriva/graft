@@ -43,7 +43,7 @@ A **source** is a component with no inputs that pushes values over time — a We
 
 **`instantiate`** creates an isolated copy of a subgraph. It takes a template — a function that builds and returns a component — and returns a new component. Each subscription gets its own fresh instance, so any `state()` or `source()` calls inside the template produce independent cells. This is how you get local state.
 
-**`compose({ into, from, key })`** wires `from`'s output into `into`'s input named `key`. Returns a new component whose inputs are `into`'s remaining inputs plus `from`'s inputs.
+**`compose({ into, from, key })`** wires `from`'s output into `into`'s input named `key`. **`compose({ into, from: { k1: A, k2: B } })`** wires multiple inputs at once. Both return a new component whose inputs are the remaining unsatisfied ones.
 
 When you're done composing, **`toReact`** converts the result into a regular `React.FC` (requires the output to be `ReactElement`).
 
@@ -130,14 +130,12 @@ const PriceCard = component({
 
 // --- Wiring ---
 
-// PriceFeed → FormatPrice → PriceCard.displayPrice
 const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
-const WithPrice = compose({ into: PriceCard, from: LivePrice, key: "displayPrice" });
-
-// CoinName (async) → Header → PriceCard.header
 const NamedHeader = compose({ into: Header, from: CoinName, key: "name" });
+
+// Wire both into PriceCard at once
 const App = toReact(
-  compose({ into: WithPrice, from: NamedHeader, key: "header" }),
+  compose({ into: PriceCard, from: { displayPrice: LivePrice, header: NamedHeader } }),
 );
 
 // One prop left — everything else is wired internally.
@@ -187,18 +185,24 @@ const FetchAge = component({
 
 The input schema is the source of truth for both TypeScript types and runtime validation. The output schema declares the type of value the component produces. Use `View` for components that return JSX.
 
-### `compose({ into, from, key })`
+### `compose({ into, from, key })` / `compose({ into, from: { ... } })`
 
 Wire `from`'s output into `into`'s input named `key`. Returns a new component.
 
 ```tsx
 import { compose } from "graft";
 
-// UserCard needs { name, email, age }
-// FetchAge needs { userId } and produces a number
-// After composing on "age":
-//   → new component needs { name, email, userId }
+// Single-wire: one output into one input
 const UserCardWithAge = compose({ into: UserCard, from: FetchAge, key: "age" });
+// UserCard needs { name, email, age }, FetchAge needs { userId }
+// → new component needs { name, email, userId }
+
+// Multi-wire: wire several inputs at once
+const FullCard = compose({
+  into: UserCard,
+  from: { age: FetchAge, email: FetchEmail },
+});
+// → new component needs { name, userId }
 ```
 
 The key insight: `"age"` disappears from the inputs because it's now satisfied internally. `"userId"` appears because FetchAge needs it and nobody provides it yet.
@@ -318,9 +322,8 @@ const Form = component({
   ),
 });
 
-const WithName = compose({ into: Form, from: NameField, key: "name" });
 const App = toReact(
-  compose({ into: WithName, from: EmailField, key: "email" }),
+  compose({ into: Form, from: { name: NameField, email: EmailField } }),
 );
 
 // Each field maintains its own text value independently.
@@ -449,20 +452,20 @@ const ExtractEmail = component({
 
 // --- Wiring ---
 
-const WithPostCount = compose({ into: ProfilePage, from: PostCount, key: "postCount" });
-// Inputs: { name, email, avatarUrl, userId }
-
-const WithAvatar = compose({ into: WithPostCount, from: Avatar, key: "avatarUrl" });
-// Inputs: { name, userId, email }
-
-const WithName = compose({ into: WithAvatar, from: ExtractName, key: "name" });
+const WithUserData = compose({
+  into: ProfilePage,
+  from: {
+    postCount: PostCount,
+    avatarUrl: Avatar,
+    name: ExtractName,
+    email: ExtractEmail,
+  },
+});
 // Inputs: { userId, email, userInfo }
 
-const WithEmail = compose({ into: WithName, from: ExtractEmail, key: "email" });
-// Inputs: { userId, userInfo }
-
-const WithUserInfo = compose({ into: WithEmail, from: UserInfo, key: "userInfo" });
-// Inputs: { userId }
+const WithUserInfo = compose({ into: WithUserData, from: UserInfo, key: "userInfo" });
+// Inputs: { userId, email }
+// (email is needed by Avatar directly and by UserInfo → ExtractEmail)
 
 const ProfilePageReact = toReact(WithUserInfo);
 
