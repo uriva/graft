@@ -1,6 +1,6 @@
 {
   "name": "graftjs",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Compose React components by wiring named parameters — type-safe, no prop drilling, no hooks",
   "type": "module",
   "main": "dist/index.js",
