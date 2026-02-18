@@ -15,13 +15,9 @@ _The smallest API imaginable._
 
 Graft is a tiny self sufficient TypeScript programming framework.
 
-
 - focuses on non-linear, async friendly composition.
-
 - jsx friendly.
-
 - can be used for data pipelines or to replace React entirely
-
 - compatible with existing react apps
 
 The main concepts:
