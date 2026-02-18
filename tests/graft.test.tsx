@@ -2132,7 +2132,9 @@ describe("status option", () => {
       status: ["price"] as const,
       run: (props) => {
         if (isGraftLoading(props.price)) return "loading";
-        if (isGraftError(props.price)) return `err: ${(props.price as { error: unknown }).error}`;
+        if (isGraftError(props.price)) {
+          return `err: ${(props.price as { error: unknown }).error}`;
+        }
         return `$${props.price}`;
       },
     });
@@ -2232,7 +2234,11 @@ describe("status option", () => {
       },
     });
 
-    const Composed = compose({ into: Display, from: PriceSource, key: "price" });
+    const Composed = compose({
+      into: Display,
+      from: PriceSource,
+      key: "price",
+    });
 
     const values: string[] = [];
     const cleanup = Composed.subscribe({}, (v) => {
@@ -2267,13 +2273,21 @@ describe("status option", () => {
       output: View,
       status: ["price"] as const,
       run: (props) => {
-        if (isGraftLoading(props.price)) return <div data-testid="out">Loading</div>;
-        if (isGraftError(props.price)) return <div data-testid="out">Error</div>;
+        if (isGraftLoading(props.price)) {
+          return <div data-testid="out">Loading</div>;
+        }
+        if (isGraftError(props.price)) {
+          return <div data-testid="out">Error</div>;
+        }
         return <div data-testid="out">${props.price}</div>;
       },
     });
 
-    const Composed = compose({ into: Display, from: PriceSource, key: "price" });
+    const Composed = compose({
+      into: Display,
+      from: PriceSource,
+      key: "price",
+    });
     const App = toReact(Composed);
 
     act(() => {

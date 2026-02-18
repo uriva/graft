@@ -28,7 +28,7 @@ The main concepts:
 For example,
 
 ```ts
-compose({ into: target, from: {keyA: sourceA, keyB: sourceB } })
+compose({ into: target, from: { keyA: sourceA, keyB: sourceB } });
 ```
 
 connects between 3 components. The remaining unsatisfied inputs of `target`,
@@ -47,7 +47,8 @@ To install it -
 npm install graftjs
 ```
 
-[GitHub](https://github.com/uriva/graft) | [npm](https://www.npmjs.com/package/graftjs)
+[GitHub](https://github.com/uriva/graft) |
+[npm](https://www.npmjs.com/package/graftjs)
 
 ## Why
 
@@ -411,7 +412,14 @@ When a component _does_ want to handle these states — show a spinner, display 
 error message — use the `status` option:
 
 ```tsx
-import { component, compose, emitter, isGraftError, isGraftLoading, View } from "graftjs";
+import {
+  component,
+  compose,
+  emitter,
+  isGraftError,
+  isGraftLoading,
+  View,
+} from "graftjs";
 
 const PriceFeed = emitter({
   output: z.number(),
