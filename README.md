@@ -37,7 +37,7 @@ connects between 3 components. The remaining unsatisfied inputs of `target`,
 inputs. The result is (again) a component with a set of known typed inputs and
 output.
 
-Turns out just this lets you do most things
+Turns out just this lets you do most things.
 
 No prop drilling. No Context. No useState. No useEffect. No manual
 subscriptions.
