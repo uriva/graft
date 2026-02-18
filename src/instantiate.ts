@@ -66,6 +66,7 @@ export function instantiate<
     _tag: "graft-component",
     schema: probe.schema,
     outputSchema: probe.outputSchema,
+    statusKeys: probe.statusKeys,
     run,
     subscribe,
   };

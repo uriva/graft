@@ -69,6 +69,7 @@ export function emitter<
     _tag: "graft-component",
     schema,
     outputSchema: output,
+    statusKeys: new Set<string>(),
     run: (props: z.infer<Schema>) => {
       return new Promise<O>((resolve) => {
         const cleanup = run((value: O) => {

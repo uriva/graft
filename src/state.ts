@@ -56,6 +56,7 @@ export function state<O>({ schema, initial }: {
     _tag: "graft-component",
     schema: emptySchema,
     outputSchema: schema,
+    statusKeys: new Set<string>(),
     run: () => current,
     subscribe,
   };

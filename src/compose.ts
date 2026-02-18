@@ -190,9 +190,21 @@ function composeSingle<
         if (intoCleanup) intoCleanup();
         intoCleanup = null;
 
-        // Short-circuit on sentinels — don't call into's run/subscribe
+        // If from emitted a sentinel:
+        // - If this key is in into's statusKeys, pass it through as the value
+        // - Otherwise, short-circuit (don't call into's run/subscribe)
         if (isSentinel(fromValue)) {
-          cb(fromValue);
+          if (!into.statusKeys.has(key)) {
+            cb(fromValue);
+            return;
+          }
+          // Pass sentinel as the key's value — into's subscribe handles it
+          intoCleanup = into.subscribe(
+            buildIntoInput(fromValue as unknown) as z.infer<SA>,
+            (intoValue: OA | typeof GraftLoading | GraftError) => {
+              if (!disposed) cb(intoValue);
+            },
+          );
           return;
         }
 
@@ -220,6 +232,7 @@ function composeSingle<
     _tag: "graft-component",
     schema: newSchema,
     outputSchema: into.outputSchema,
+    statusKeys: new Set<string>(),
     run,
     subscribe,
   };

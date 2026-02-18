@@ -9,4 +9,5 @@ export type {
   GraftComponent,
   GraftError,
   MaybePromise,
+  WithStatus,
 } from "./types.js";

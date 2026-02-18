@@ -37,6 +37,14 @@ export const isSentinel = (
   value === GraftLoading || isGraftError(value);
 
 /**
+ * Widen specific keys of T to include loading/error sentinels.
+ * Used by `component({ status: [...] })` to type the `run` function.
+ */
+export type WithStatus<T, R extends keyof T> = {
+  [K in keyof T]: K extends R ? T[K] | typeof GraftLoading | GraftError : T[K];
+};
+
+/**
  * A graft component: a typed function from inputs (schema S) to output O.
  *
  * When O is ReactElement, this is a visual component.
@@ -50,6 +58,10 @@ export const isSentinel = (
  * subscribe() is the reactive primitive: it calls the callback whenever
  * the output changes. For regular components this fires once. For graphs
  * containing sources, it fires whenever a source emits.
+ *
+ * statusKeys lists input keys that accept loading/error sentinels
+ * instead of short-circuiting. For those keys, the run function receives
+ * `T | GraftLoading | GraftError` instead of just `T`.
  */
 export interface GraftComponent<
   S extends z.ZodObject<z.ZodRawShape>,
@@ -58,6 +70,7 @@ export interface GraftComponent<
   readonly _tag: "graft-component";
   readonly schema: S;
   readonly outputSchema: z.ZodType<O>;
+  readonly statusKeys: ReadonlySet<string>;
   readonly run: (props: z.infer<S>) => MaybePromise<O>;
   readonly subscribe: (
     props: z.infer<S>,

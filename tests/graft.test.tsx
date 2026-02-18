@@ -2099,3 +2099,290 @@ describe("boundary validation", () => {
     );
   });
 });
+
+describe("status option", () => {
+  it("status key receives GraftLoading instead of short-circuiting", () => {
+    const Handler = component({
+      input: z.object({ price: z.number() }),
+      output: z.string(),
+      status: ["price"] as const,
+      run: (props) => {
+        if (props.price === GraftLoading) return "loading";
+        if (isGraftError(props.price)) return "error";
+        return `$${props.price}`;
+      },
+    });
+
+    const values: string[] = [];
+    const cleanup = Handler.subscribe(
+      { price: GraftLoading as unknown as number },
+      (v) => {
+        if (typeof v === "string") values.push(v);
+      },
+    );
+    assert.deepEqual(values, ["loading"]);
+    cleanup();
+  });
+
+  it("status key receives GraftError instead of short-circuiting", () => {
+    const Handler = component({
+      input: z.object({ price: z.number() }),
+      output: z.string(),
+      status: ["price"] as const,
+      run: (props) => {
+        if (props.price === GraftLoading) return "loading";
+        if (isGraftError(props.price)) return `err: ${(props.price as { error: unknown }).error}`;
+        return `$${props.price}`;
+      },
+    });
+
+    const err = graftError("network down");
+    const values: string[] = [];
+    const cleanup = Handler.subscribe(
+      { price: err as unknown as number },
+      (v) => {
+        if (typeof v === "string") values.push(v);
+      },
+    );
+    assert.deepEqual(values, ["err: network down"]);
+    cleanup();
+  });
+
+  it("non-status keys still short-circuit normally", () => {
+    const Handler = component({
+      input: z.object({ price: z.number(), name: z.string() }),
+      output: z.string(),
+      status: ["price"] as const,
+      run: (props) => {
+        if (props.price === GraftLoading) return "price loading";
+        return `${props.name}: $${props.price}`;
+      },
+    });
+
+    // name is NOT a status key — GraftLoading should short-circuit
+    const values: (string | typeof GraftLoading)[] = [];
+    const cleanup = Handler.subscribe(
+      { price: 42, name: GraftLoading as unknown as string },
+      (v) => {
+        values.push(v as string | typeof GraftLoading);
+      },
+    );
+    assert.equal(values.length, 1);
+    assert.equal(values[0], GraftLoading);
+    cleanup();
+  });
+
+  it("status key works through compose — from emits loading", () => {
+    const SlowPrice = emitter({
+      output: z.number(),
+      run: (emit) => {
+        // Don't emit anything — subscriber sees GraftLoading from the async gap
+        return () => {};
+      },
+    });
+
+    const Display = component({
+      input: z.object({ price: z.number() }),
+      output: z.string(),
+      status: ["price"] as const,
+      run: (props) => {
+        if (props.price === GraftLoading) return "loading...";
+        if (isGraftError(props.price)) return "error!";
+        return `$${props.price}`;
+      },
+    });
+
+    const Composed = compose({ into: Display, from: SlowPrice, key: "price" });
+
+    const values: (string | typeof GraftLoading)[] = [];
+    const cleanup = Composed.subscribe({}, (v) => {
+      values.push(v as string | typeof GraftLoading);
+    });
+    // SlowPrice emits GraftLoading initially, compose sees it and because
+    // Display has "price" as a status key, it passes the sentinel through
+    // to Display's subscribe instead of short-circuiting.
+    assert.deepEqual(values, ["loading..."]);
+    cleanup();
+  });
+
+  it("status key works through compose — from emits error then value", () => {
+    let emitFn: ((v: number) => void) | null = null;
+
+    const PriceSource = emitter({
+      output: z.number(),
+      run: (emit) => {
+        // Emit an error synchronously — no GraftLoading gap
+        emit(graftError("timeout") as unknown as number);
+        emitFn = emit;
+        return () => {
+          emitFn = null;
+        };
+      },
+    });
+
+    const Display = component({
+      input: z.object({ price: z.number() }),
+      output: z.string(),
+      status: ["price"] as const,
+      run: (props) => {
+        if (props.price === GraftLoading) return "loading...";
+        if (isGraftError(props.price)) return "error!";
+        return `$${props.price}`;
+      },
+    });
+
+    const Composed = compose({ into: Display, from: PriceSource, key: "price" });
+
+    const values: string[] = [];
+    const cleanup = Composed.subscribe({}, (v) => {
+      if (typeof v === "string") values.push(v);
+    });
+    // Emitter fires error synchronously, so GraftLoading is deduped away
+    // (emitter emits GraftLoading first, then immediately the error —
+    // both are different sentinels so both pass through)
+    assert.ok(values.includes("error!"));
+
+    // Now emit a real value
+    emitFn!(99);
+    assert.ok(values.includes("$99"));
+    cleanup();
+  });
+
+  it("status keys work with toReact", () => {
+    let emitFn: ((v: number) => void) | null = null;
+
+    const PriceSource = emitter({
+      output: z.number(),
+      run: (emit) => {
+        emitFn = emit;
+        return () => {
+          emitFn = null;
+        };
+      },
+    });
+
+    const Display = component({
+      input: z.object({ price: z.number() }),
+      output: View,
+      status: ["price"] as const,
+      run: (props) => {
+        if (props.price === GraftLoading) return <div data-testid="out">Loading</div>;
+        if (isGraftError(props.price)) return <div data-testid="out">Error</div>;
+        return <div data-testid="out">${props.price}</div>;
+      },
+    });
+
+    const Composed = compose({ into: Display, from: PriceSource, key: "price" });
+    const App = toReact(Composed);
+
+    act(() => {
+      render(<App />);
+    });
+    // Initially loading
+    assert.equal(screen.getByTestId("out").textContent, "Loading");
+
+    // Emit a value
+    act(() => {
+      emitFn!(42);
+    });
+    assert.equal(screen.getByTestId("out").textContent, "$42");
+  });
+
+  it("multiple status keys on same component", () => {
+    const Handler = component({
+      input: z.object({ a: z.number(), b: z.number() }),
+      output: z.string(),
+      status: ["a", "b"] as const,
+      run: (props) => {
+        const aStr = props.a === GraftLoading
+          ? "a:loading"
+          : isGraftError(props.a)
+          ? "a:error"
+          : `a:${props.a}`;
+        const bStr = props.b === GraftLoading
+          ? "b:loading"
+          : isGraftError(props.b)
+          ? "b:error"
+          : `b:${props.b}`;
+        return `${aStr},${bStr}`;
+      },
+    });
+
+    const values: string[] = [];
+    const cleanup = Handler.subscribe(
+      {
+        a: GraftLoading as unknown as number,
+        b: graftError("fail") as unknown as number,
+      },
+      (v) => {
+        if (typeof v === "string") values.push(v);
+      },
+    );
+    assert.deepEqual(values, ["a:loading,b:error"]);
+    cleanup();
+  });
+
+  it("component without status has empty statusKeys", () => {
+    const C = component({
+      input: z.object({ x: z.number() }),
+      output: z.number(),
+      run: ({ x }) => x * 2,
+    });
+    assert.equal(C.statusKeys.size, 0);
+  });
+
+  it("component with status has correct statusKeys", () => {
+    const C = component({
+      input: z.object({ x: z.number(), y: z.string() }),
+      output: z.string(),
+      status: ["x"] as const,
+      run: (props) => String(props.x),
+    });
+    assert.equal(C.statusKeys.size, 1);
+    assert.ok(C.statusKeys.has("x"));
+    assert.ok(!C.statusKeys.has("y"));
+  });
+
+  it("deduplication still works with status keys", () => {
+    let emitFn: ((v: number) => void) | null = null;
+
+    const Source = emitter({
+      output: z.number(),
+      run: (emit) => {
+        emitFn = emit;
+        return () => {
+          emitFn = null;
+        };
+      },
+    });
+
+    const Display = component({
+      input: z.object({ val: z.number() }),
+      output: z.string(),
+      status: ["val"] as const,
+      run: (props) => {
+        if (props.val === GraftLoading) return "loading";
+        return `v:${props.val}`;
+      },
+    });
+
+    const Composed = compose({ into: Display, from: Source, key: "val" });
+
+    const values: string[] = [];
+    const cleanup = Composed.subscribe({}, (v) => {
+      if (typeof v === "string") values.push(v);
+    });
+    assert.deepEqual(values, ["loading"]);
+
+    // Emit same value twice — should only appear once due to dedup
+    emitFn!(10);
+    emitFn!(10);
+    assert.deepEqual(values, ["loading", "v:10"]);
+
+    // Emit different value
+    emitFn!(20);
+    assert.deepEqual(values, ["loading", "v:10", "v:20"]);
+
+    cleanup();
+  });
+});

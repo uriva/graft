@@ -391,41 +391,58 @@ plugin. Tiny with zero dependencies except zod as the types manager.
 
 ## Loading and error states
 
-When a component is async, graft handles the in-between time with two sentinels
-that flow through the graph like regular data.
+When a component is async or backed by an emitter, graft uses two sentinels that
+flow through the graph like regular data:
 
-**`GraftLoading`** — emitted when a value isn't available yet. Async components
-emit it immediately, then the resolved value. Emitters emit it until their first
-`emit()` call. `compose` short-circuits on loading — downstream `run` functions
-aren't called. `toReact` renders `null`.
+**`GraftLoading`** — the value isn't available yet. Async components emit it
+immediately, then the resolved value. Emitters emit it until their first
+`emit()` call.
 
-**`GraftError`** — wraps a caught error from an async rejection. Like loading,
-it short-circuits through `compose`. `toReact` renders `null`.
+**`GraftError`** — wraps a caught error from an async rejection.
+
+By default, both sentinels short-circuit through `compose` — downstream `run`
+functions aren't called, and `toReact` renders `null`. This is the right default
+for most of the graph: intermediate transforms shouldn't need to care about
+loading states.
+
+### Handling loading and errors explicitly
+
+When a component _does_ want to handle these states — show a spinner, display an
+error message — use the `status` option:
 
 ```tsx
-import { GraftLoading, isGraftError } from "graftjs";
+import { component, compose, emitter, GraftLoading, isGraftError, View } from "graftjs";
 
-const AsyncData = component({
-  input: z.object({ id: z.string() }),
+const PriceFeed = emitter({
   output: z.number(),
-  run: async ({ id }) => {
-    const res = await fetch(`/api/data/${id}`);
-    if (!res.ok) throw new Error("fetch failed");
-    return (await res.json()).value;
+  run: (emit) => {
+    const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
+    ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
+    return () => ws.close();
   },
 });
 
-// subscribe() lets you observe the full lifecycle:
-AsyncData.subscribe({ id: "123" }, (value) => {
-  if (value === GraftLoading) {
-    // Still loading...
-  } else if (isGraftError(value)) {
-    console.error("Error:", value.error);
-  } else {
-    console.log("Got value:", value);
-  }
+const PriceDisplay = component({
+  input: z.object({ price: z.number() }),
+  output: View,
+  status: ["price"],
+  run: ({ price }) => {
+    if (price === GraftLoading) return <div>Loading...</div>;
+    if (isGraftError(price)) return <div>Error: {String(price.error)}</div>;
+    return <div>${price}</div>;
+  },
 });
+
+const App = compose({ into: PriceDisplay, from: PriceFeed, key: "price" });
 ```
+
+`status: ["price"]` tells graft that `PriceDisplay` wants to receive
+`GraftLoading` and `GraftError` on its `price` input instead of having compose
+short-circuit. The type of `price` inside `run` widens to
+`number | typeof GraftLoading | GraftError`. Keys _not_ listed in `status`
+still short-circuit as usual.
+
+You can list multiple keys: `status: ["price", "name"]`.
 
 `state()` never produces sentinels — it always has a value (the initial value).
 
