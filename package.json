@@ -16,7 +16,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npx tsx --test tests/*.test.tsx",
+    "test": "npx tsx --test --test-force-exit tests/*.test.tsx",
     "prepublishOnly": "tsc"
   },
   "repository": {
