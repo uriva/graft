@@ -8,14 +8,14 @@ import {
   component,
   compose,
   emitter,
-  GraftLoading,
   instantiate,
   isGraftError,
+  isGraftLoading,
   state,
   toReact,
   View,
 } from "../src/index.js";
-import { graftError, isSentinel } from "../src/types.js";
+import { graftError, GraftLoading, isSentinel } from "../src/types.js";
 
 describe("component", () => {
   it("creates a GraftComponent with correct tag and schema", () => {
@@ -1108,7 +1108,7 @@ describe("GraftLoading", () => {
 
     // GraftLoading emitted synchronously
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     // Wait for resolution
     await new Promise((r) => setTimeout(r, 50));
@@ -1152,7 +1152,7 @@ describe("GraftLoading", () => {
 
     // GraftLoading because no sync emit
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     cleanup();
   });
@@ -1201,13 +1201,13 @@ describe("GraftLoading", () => {
 
     // First emission is GraftLoading (short-circuit — Display.run was NOT called)
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     // Wait for async resolution — now Display.run is called
     await new Promise((r) => setTimeout(r, 50));
     assert.equal(values.length, 2);
     // Second value is a ReactElement (from Display), not GraftLoading
-    assert.notEqual(values[1], GraftLoading);
+    assert.ok(!isGraftLoading(values[1]));
 
     cleanup();
   });
@@ -1277,12 +1277,12 @@ describe("GraftLoading", () => {
     assert.equal(el.textContent, "84");
   });
 
-  it("isSentinel correctly identifies GraftLoading", () => {
-    assert.equal(isSentinel(GraftLoading), true);
-    assert.equal(isSentinel(42), false);
-    assert.equal(isSentinel(null), false);
-    assert.equal(isSentinel("hello"), false);
-    assert.equal(isSentinel(undefined), false);
+  it("isGraftLoading correctly identifies GraftLoading", () => {
+    assert.equal(isGraftLoading(GraftLoading), true);
+    assert.equal(isGraftLoading(42), false);
+    assert.equal(isGraftLoading(null), false);
+    assert.equal(isGraftLoading("hello"), false);
+    assert.equal(isGraftLoading(undefined), false);
   });
 });
 
@@ -1484,7 +1484,7 @@ describe("deduplication", () => {
 
     // Should get exactly one GraftLoading, not two
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     // Wait for resolution
     await new Promise((r) => setTimeout(r, 50));
@@ -1510,7 +1510,7 @@ describe("deduplication", () => {
     });
 
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     await new Promise((r) => setTimeout(r, 50));
     assert.equal(values.length, 2);
@@ -1842,7 +1842,7 @@ describe("GraftError", () => {
 
     // GraftLoading first
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     // Wait for rejection
     await new Promise((r) => setTimeout(r, 50));
@@ -1882,7 +1882,7 @@ describe("GraftError", () => {
 
     // GraftLoading first (short-circuited)
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     // Then GraftError (short-circuited — Display.run was NOT called)
     await new Promise((r) => setTimeout(r, 50));
@@ -1934,13 +1934,14 @@ describe("GraftError", () => {
     assert.equal(isGraftError(null), false);
     assert.equal(isGraftError(undefined), false);
     assert.equal(isGraftError({ _tag: "wrong" }), false);
+    assert.equal(isGraftLoading(GraftLoading), true);
     assert.equal(isGraftError(GraftLoading), false);
   });
 
   it("isSentinel correctly identifies GraftError", () => {
     const ge = graftError(new Error("test"));
     assert.equal(isSentinel(ge), true);
-    assert.equal(isSentinel(GraftLoading), true);
+    assert.equal(isGraftLoading(GraftLoading), true);
     assert.equal(isSentinel(42), false);
   });
 
@@ -1991,7 +1992,7 @@ describe("GraftError", () => {
     });
 
     // GraftLoading first
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
 
     // Then GraftError (propagated through Double and Show without calling them)
     await new Promise((r) => setTimeout(r, 50));
@@ -2107,7 +2108,7 @@ describe("status option", () => {
       output: z.string(),
       status: ["price"] as const,
       run: (props) => {
-        if (props.price === GraftLoading) return "loading";
+        if (isGraftLoading(props.price)) return "loading";
         if (isGraftError(props.price)) return "error";
         return `$${props.price}`;
       },
@@ -2130,7 +2131,7 @@ describe("status option", () => {
       output: z.string(),
       status: ["price"] as const,
       run: (props) => {
-        if (props.price === GraftLoading) return "loading";
+        if (isGraftLoading(props.price)) return "loading";
         if (isGraftError(props.price)) return `err: ${(props.price as { error: unknown }).error}`;
         return `$${props.price}`;
       },
@@ -2154,7 +2155,7 @@ describe("status option", () => {
       output: z.string(),
       status: ["price"] as const,
       run: (props) => {
-        if (props.price === GraftLoading) return "price loading";
+        if (isGraftLoading(props.price)) return "price loading";
         return `${props.name}: $${props.price}`;
       },
     });
@@ -2168,7 +2169,7 @@ describe("status option", () => {
       },
     );
     assert.equal(values.length, 1);
-    assert.equal(values[0], GraftLoading);
+    assert.ok(isGraftLoading(values[0]));
     cleanup();
   });
 
@@ -2186,7 +2187,7 @@ describe("status option", () => {
       output: z.string(),
       status: ["price"] as const,
       run: (props) => {
-        if (props.price === GraftLoading) return "loading...";
+        if (isGraftLoading(props.price)) return "loading...";
         if (isGraftError(props.price)) return "error!";
         return `$${props.price}`;
       },
@@ -2225,7 +2226,7 @@ describe("status option", () => {
       output: z.string(),
       status: ["price"] as const,
       run: (props) => {
-        if (props.price === GraftLoading) return "loading...";
+        if (isGraftLoading(props.price)) return "loading...";
         if (isGraftError(props.price)) return "error!";
         return `$${props.price}`;
       },
@@ -2266,7 +2267,7 @@ describe("status option", () => {
       output: View,
       status: ["price"] as const,
       run: (props) => {
-        if (props.price === GraftLoading) return <div data-testid="out">Loading</div>;
+        if (isGraftLoading(props.price)) return <div data-testid="out">Loading</div>;
         if (isGraftError(props.price)) return <div data-testid="out">Error</div>;
         return <div data-testid="out">${props.price}</div>;
       },
@@ -2294,12 +2295,12 @@ describe("status option", () => {
       output: z.string(),
       status: ["a", "b"] as const,
       run: (props) => {
-        const aStr = props.a === GraftLoading
+        const aStr = isGraftLoading(props.a)
           ? "a:loading"
           : isGraftError(props.a)
           ? "a:error"
           : `a:${props.a}`;
-        const bStr = props.b === GraftLoading
+        const bStr = isGraftLoading(props.b)
           ? "b:loading"
           : isGraftError(props.b)
           ? "b:error"
@@ -2361,7 +2362,7 @@ describe("status option", () => {
       output: z.string(),
       status: ["val"] as const,
       run: (props) => {
-        if (props.val === GraftLoading) return "loading";
+        if (isGraftLoading(props.val)) return "loading";
         return `v:${props.val}`;
       },
     });

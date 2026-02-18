@@ -25,6 +25,11 @@ export const graftError = (error: unknown): GraftError => ({
   error,
 });
 
+/** Check if a value is GraftLoading. */
+export const isGraftLoading = (
+  value: unknown,
+): value is typeof GraftLoading => value === GraftLoading;
+
 /** Check if a value is a GraftError. */
 export const isGraftError = (value: unknown): value is GraftError =>
   value !== null && typeof value === "object" && "_tag" in value &&
@@ -34,7 +39,7 @@ export const isGraftError = (value: unknown): value is GraftError =>
 export const isSentinel = (
   value: unknown,
 ): value is typeof GraftLoading | GraftError =>
-  value === GraftLoading || isGraftError(value);
+  isGraftLoading(value) || isGraftError(value);
 
 /**
  * Widen specific keys of T to include loading/error sentinels.

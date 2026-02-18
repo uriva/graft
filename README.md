@@ -411,7 +411,7 @@ When a component _does_ want to handle these states — show a spinner, display 
 error message — use the `status` option:
 
 ```tsx
-import { component, compose, emitter, GraftLoading, isGraftError, View } from "graftjs";
+import { component, compose, emitter, isGraftError, isGraftLoading, View } from "graftjs";
 
 const PriceFeed = emitter({
   output: z.number(),
@@ -427,7 +427,7 @@ const PriceDisplay = component({
   output: View,
   status: ["price"],
   run: ({ price }) => {
-    if (price === GraftLoading) return <div>Loading...</div>;
+    if (isGraftLoading(price)) return <div>Loading...</div>;
     if (isGraftError(price)) return <div>Error: {String(price.error)}</div>;
     return <div>${price}</div>;
   },
@@ -436,15 +436,11 @@ const PriceDisplay = component({
 const App = compose({ into: PriceDisplay, from: PriceFeed, key: "price" });
 ```
 
-`status: ["price"]` tells graft that `PriceDisplay` wants to receive
-`GraftLoading` and `GraftError` on its `price` input instead of having compose
-short-circuit. The type of `price` inside `run` widens to
-`number | typeof GraftLoading | GraftError`. Keys _not_ listed in `status`
-still short-circuit as usual.
+`status: ["price"]` tells graft that `PriceDisplay` wants to receive loading and
+error sentinels on its `price` input instead of having compose short-circuit.
+Keys _not_ listed in `status` still short-circuit as usual.
 
 You can list multiple keys: `status: ["price", "name"]`.
-
-`state()` never produces sentinels — it always has a value (the initial value).
 
 ## Deduplication
 
