@@ -13,283 +13,148 @@
 
 # graft
 
-Compose React components by wiring named parameters together.
-
-`compose({ into, from, key })` feeds `from`'s output into `into`'s input named `key`. The remaining unsatisfied inputs bubble up as the composed component's props. The result is always a standard React component.
-
-No prop drilling. No Context. No useState. No useEffect. No manual subscriptions.
-
 ```
 npm install graftjs
 ```
 
-## Why
+Have you ever chased a stale closure bug through a `useEffect` dependency array? Or watched a parent re-render cascade through child components that didn't even use the state that changed? Or needed to add a parameter deep in a component tree and had to refactor every intermediate component just to thread it through?
 
-React components are functions with named parameters (props). When you build a UI, you're really building a graph of data dependencies between those functions. But React forces you to wire that graph imperatively — passing props down, lifting state up, wrapping in Context providers, sprinkling hooks everywhere.
+Graft eliminates all three. You describe what feeds into what, and the library builds the component. No hooks, no Context, no prop drilling.
 
-Graft lets you describe the wiring directly. You say *what* feeds into *what*, and the library builds the component for you. The unsatisfied inputs become the new component's props. This is [graph programming](https://uriva.github.io/blog/graph-programming.html) applied to React.
+## A component is a typed function
 
-Graft drastically reduces the tokens needed to construct something, and drastically reduces the number of possible bugs.
-
-## Core concepts
-
-There are only two things: **components** and **compose**.
-
-A **component** is a typed function from inputs to an output. If the output is a `ReactElement`, it renders UI. If the output is a `number`, `string`, `object`, etc., it's a data source. There is no separate "provider" concept — everything is a component.
-
-A **source** is a component with no inputs that pushes values over time — a WebSocket, a timer, a browser API. It's one way to introduce reactivity. Everything downstream re-runs automatically when a source emits.
-
-**`state`** is a global mutable cell. It returns a `[Component, setter]` tuple. The component behaves like a source (no inputs, emits values), and the setter can be called from anywhere — event handlers, outside the graph, wherever. New subscribers receive the current value immediately.
-
-**`instantiate`** creates an isolated copy of a subgraph. It takes a template — a function that builds and returns a component — and returns a new component. Each subscription gets its own fresh instance, so any `state()` or `source()` calls inside the template produce independent cells. This is how you get local state.
-
-**`compose({ into, from, key })`** wires `from`'s output into `into`'s input named `key`. **`compose({ into, from: { k1: A, k2: B } })`** wires multiple inputs at once. Both return a new component whose inputs are the remaining unsatisfied ones.
-
-When you're done composing, **`toReact`** converts the result into a regular `React.FC` (requires the output to be `ReactElement`).
-
-### "The" vs "a"
-
-In React, everything is **"a"** by default. Each render creates *a* counter, *a* form, *a* piece of state. Multiple instances are the norm — you get isolation for free via hooks.
-
-Graft defaults to **"the"**. `state()` creates *the* cell. `source()` creates *the* stream. There is exactly one, and every subscriber sees the same value. Definiteness is the default.
-
-`instantiate()` is how you say **"a"** — it's the explicit opt-in to indefinite instances. Each subscription gets its own independent copy of the subgraph, with its own state cells and source subscriptions.
-
-## Quick example
-
-A live crypto price card. The price streams over Binance's public WebSocket, the coin name is fetched async from CoinGecko, and a header embeds as a child View inside the card layout. All real, no API keys.
-
-```mermaid
-graph BT
-    App["&lt;App coinId=&quot;bitcoin&quot; /&gt;"] -- coinId --> CoinName
-    CoinName -- name --> Header
-    Header -- header --> PriceCard
-    PriceFeed -- price --> FormatPrice
-    FormatPrice -- displayPrice --> PriceCard
-    PriceCard -- View --> Output((" "))
-
-    style Output fill:none,stroke:none
-```
+It takes named inputs and produces an output. That's it.
 
 ```tsx
 import { z } from "zod/v4";
-import { component, compose, source, toReact, View } from "graft";
-
-// A live price feed — pushes new values over a public WebSocket.
-// source() is the only way to introduce reactivity into a graft graph.
-// Everything downstream re-runs automatically when it emits.
-const PriceFeed = source({
-  output: z.number(),
-  run: (emit) => {
-    const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
-    ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
-    return () => ws.close();
-  },
-});
-
-// An async data component — fetches the coin name from CoinGecko.
-// The run function is async. compose handles this automatically.
-const CoinName = component({
-  input: z.object({ coinId: z.string() }),
-  output: z.string(),
-  run: async ({ coinId }) => {
-    const res = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false`,
-    );
-    return (await res.json()).name;
-  },
-});
-
-// A pure data component — formats a number into a display string.
-const FormatPrice = component({
-  input: z.object({ price: z.number() }),
-  output: z.string(),
-  run: ({ price }) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price),
-});
-
-// A header component — returns a View.
-const Header = component({
-  input: z.object({ name: z.string() }),
-  output: View,
-  run: ({ name }) => <h1>{name}</h1>,
-});
-
-// The page layout — accepts a View for the header slot and a string for the price.
-// It doesn't know where any of its inputs come from.
-const PriceCard = component({
-  input: z.object({ header: View, displayPrice: z.string() }),
-  output: View,
-  run: ({ header, displayPrice }) => (
-    <div>
-      {header}
-      <span>{displayPrice}</span>
-    </div>
-  ),
-});
-
-// --- Wiring ---
-
-const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
-const NamedHeader = compose({ into: Header, from: CoinName, key: "name" });
-
-// Wire both into PriceCard at once
-const App = toReact(
-  compose({ into: PriceCard, from: { displayPrice: LivePrice, header: NamedHeader } }),
-);
-
-// One prop left — everything else is wired internally.
-// Renders nothing while CoinGecko loads, then shows the card.
-// When Binance pushes a new trade, only the price path re-runs.
-<App coinId="bitcoin" />
-```
-
-<p align="center">
-  <img src="demo.gif" alt="Live crypto price card demo" width="600" />
-</p>
-
-## API
-
-### `component({ input, output, run })`
-
-Define a component from a zod input schema, a zod output schema, and a function.
-
-```tsx
-import { z } from "zod/v4";
-import { component, View } from "graft";
-
-// A visual component (output is ReactElement)
-const UserCard = component({
-  input: z.object({
-    name: z.string(),
-    email: z.string(),
-    age: z.number(),
-  }),
-  output: View,
-  run: ({ name, email, age }) => (
-    <div>
-      <h2>{name}</h2>
-      <p>{email}</p>
-      <p>{age} years old</p>
-    </div>
-  ),
-});
-
-// A data component (output is a number)
-const FetchAge = component({
-  input: z.object({ userId: z.string() }),
-  output: z.number(),
-  run: ({ userId }) => lookupAge(userId),
-});
-```
-
-The input schema is the source of truth for both TypeScript types and runtime validation. The output schema declares the type of value the component produces. Use `View` for components that return JSX.
-
-### `compose({ into, from, key })` / `compose({ into, from: { ... } })`
-
-Wire `from`'s output into `into`'s input named `key`. Returns a new component.
-
-```tsx
-import { compose } from "graft";
-
-// Single-wire: one output into one input
-const UserCardWithAge = compose({ into: UserCard, from: FetchAge, key: "age" });
-// UserCard needs { name, email, age }, FetchAge needs { userId }
-// → new component needs { name, email, userId }
-
-// Multi-wire: wire several inputs at once
-const FullCard = compose({
-  into: UserCard,
-  from: { age: FetchAge, email: FetchEmail },
-});
-// → new component needs { name, userId }
-```
-
-The key insight: `"age"` disappears from the inputs because it's now satisfied internally. `"userId"` appears because FetchAge needs it and nobody provides it yet.
-
-### `toReact(graftComponent)`
-
-Convert a graft component into a standard `React.FC`. This is the boundary between graft and React. The component must produce a `ReactElement`. Props are validated at runtime — a `ZodError` is thrown if anything is missing or has the wrong type.
-
-```tsx
-import { toReact } from "graft";
-
-const UserCardReact = toReact(UserCardWithAge);
-
-// TypeScript knows the props are { name: string, email: string, userId: string }
-<UserCardReact name="Alice" email="alice@example.com" userId="u123" />
-```
-
-### `source({ output, run })`
-
-Create a push-based data source with no inputs. This is the only way to introduce reactivity into a graft graph. The `run` function receives an `emit` callback and returns a cleanup function.
-
-```tsx
-import { z } from "zod/v4";
-import { source } from "graft";
-
-const GeoLocation = source({
-  output: z.object({ lat: z.number(), lng: z.number() }),
-  run: (emit) => {
-    const id = navigator.geolocation.watchPosition((pos) =>
-      emit({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-    );
-    return () => navigator.geolocation.clearWatch(id);
-  },
-});
-```
-
-When a source emits a new value, every downstream component that depends on it re-runs automatically. Cleanup is called when the React component unmounts.
-
-### `state({ schema, initial })`
-
-Create a global mutable state cell. Returns a `[Component, setter]` tuple.
-
-```tsx
-import { z } from "zod/v4";
-import { state, component, compose, toReact, View } from "graft";
-
-const [CurrentUser, setCurrentUser] = state({
-  schema: z.string(),
-  initial: "anonymous",
-});
+import { component, View } from "graftjs";
 
 const Greeting = component({
   input: z.object({ name: z.string() }),
   output: View,
   run: ({ name }) => <h1>Hello, {name}</h1>,
 });
+```
+
+The output doesn't have to be JSX. A component that returns data is just a transform:
+
+```tsx
+const FormatPrice = component({
+  input: z.object({ price: z.number() }),
+  output: z.string(),
+  run: ({ price }) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(price),
+});
+```
+
+## compose wires components together
+
+`compose({ into, from, key })` feeds `from`'s output into `into`'s input named `key`. The satisfied input disappears. Unsatisfied inputs bubble up as the new component's props.
+
+```tsx
+import { compose } from "graftjs";
+
+const PriceDisplay = component({
+  input: z.object({ displayPrice: z.string() }),
+  output: View,
+  run: ({ displayPrice }) => <span>{displayPrice}</span>,
+});
+
+// FormatPrice needs { price }, PriceDisplay needs { displayPrice }
+// After compose: the result needs only { price }
+const FormattedPrice = compose({
+  into: PriceDisplay,
+  from: FormatPrice,
+  key: "displayPrice",
+});
+```
+
+Wire multiple inputs at once:
+
+```tsx
+const Card = component({
+  input: z.object({ title: z.string(), body: z.string() }),
+  output: View,
+  run: ({ title, body }) => <div><h2>{title}</h2><p>{body}</p></div>,
+});
+
+const App = compose({
+  into: Card,
+  from: { title: TitleSource, body: BodySource },
+});
+```
+
+## toReact converts to a regular React component
+
+When all inputs are satisfied (or you want the remaining ones as props), `toReact` gives you a standard `React.FC`.
+
+```tsx
+import { toReact } from "graftjs";
+
+const App = toReact(FormattedPrice);
+
+// TypeScript knows this needs { price: number }
+<App price={42000} />
+```
+
+## source replaces useEffect
+
+In React you'd use `useEffect` + `useState` for a WebSocket, a timer, or a browser API. In graft, that's a `source` — a component with no inputs that pushes values over time. Everything downstream re-runs automatically.
+
+```tsx
+import { source } from "graftjs";
+
+const PriceFeed = source({
+  output: z.number(),
+  run: (emit) => {
+    const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
+    ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
+    return () => ws.close(); // cleanup on unmount
+  },
+});
+```
+
+Wire it into the graph and you have a live-updating UI with no hooks:
+
+```tsx
+const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
+const App = toReact(compose({ into: PriceDisplay, from: LivePrice, key: "displayPrice" }));
+
+// No props needed — everything is wired internally
+<App />
+```
+
+## state replaces useState
+
+Returns a `[Component, setter]` tuple. The component emits the current value. The setter can be called from anywhere — event handlers, callbacks, outside the graph.
+
+```tsx
+import { state } from "graftjs";
+
+const [CurrentUser, setCurrentUser] = state({
+  schema: z.string(),
+  initial: "anonymous",
+});
 
 const App = toReact(
   compose({ into: Greeting, from: CurrentUser, key: "name" }),
 );
 
-// Renders: <h1>Hello, anonymous</h1>
-// Then call from anywhere:
+// Renders: Hello, anonymous
 setCurrentUser("Alice");
-// Re-renders: <h1>Hello, Alice</h1>
+// Re-renders: Hello, Alice
 ```
 
-The component behaves like a source — no inputs, emits values, works with `compose`. The setter is a plain function you can call from event handlers, callbacks, or anywhere else. New subscribers immediately receive the current value, so they never start empty.
+## instantiate creates isolated copies
 
-Note: `state` is global — all usages share the same cell. If you need local state (e.g., two independent form fields from the same template), use `instantiate`.
-
-### `instantiate(template)`
-
-Create an isolated instance of a subgraph. The template is a function that builds and returns a component. Each call to `instantiate` creates independent `state()` cells and `source()` subscriptions.
-
-**When to use `instantiate` vs a plain `component`:**
-
-A `component` is a pure function — same inputs, same output. It has no internal state. If you only need to transform data or render props into JSX, use `component`. That's most of the time.
-
-Use `instantiate` when a piece of your graph needs **its own mutable state** — state that is local to that usage, not shared globally. The typical case is reusable UI elements: form fields, toggles, expandable sections, anything where each usage needs independent internal state.
+`state` and `source` are global by default — every subscriber shares the same cell. `instantiate` creates independent instances, which is how you get local state.
 
 ```tsx
-import { z } from "zod/v4";
-import { component, compose, instantiate, state, toReact, View } from "graft";
+import { instantiate } from "graftjs";
 
-// A template: a function that builds a subgraph.
-// Each call creates fresh state() cells.
 const TextField = () => {
   const [Value, setValue] = state({ schema: z.string(), initial: "" });
 
@@ -307,216 +172,111 @@ const TextField = () => {
   return compose({ into: Input, from: Value, key: "text" });
 };
 
-// Two independent instances — each has its own Value state cell.
+// Two independent text fields — typing in one doesn't affect the other
 const NameField = instantiate(TextField);
 const EmailField = instantiate(TextField);
-
-const Form = component({
-  input: z.object({ name: View, email: View }),
-  output: View,
-  run: ({ name, email }) => (
-    <form>
-      {name}
-      {email}
-    </form>
-  ),
-});
-
-const App = toReact(
-  compose({ into: Form, from: { name: NameField, email: EmailField } }),
-);
-
-// Each field maintains its own text value independently.
-<App label="Name" />
 ```
 
-Without `instantiate`, both fields would share the same `state()` cell — typing in one would update both. `instantiate` ensures each usage gets its own isolated copy of the entire subgraph.
+## Full example
 
-### `View`
+A live crypto price card. Price streams over WebSocket, coin name is fetched async, both feed into a card layout.
 
-A pre-built zod schema for `ReactElement` output. Use it as the `output` for any component that returns JSX.
+```mermaid
+graph BT
+    App["&lt;App coinId=&quot;bitcoin&quot; /&gt;"] -- coinId --> CoinName
+    CoinName -- name --> Header
+    Header -- header --> PriceCard
+    PriceFeed -- price --> FormatPrice
+    FormatPrice -- displayPrice --> PriceCard
+    PriceCard -- View --> Output((" "))
 
-```tsx
-import { View } from "graft";
-
-const MyComponent = component({
-  input: z.object({ text: z.string() }),
-  output: View,
-  run: ({ text }) => <p>{text}</p>,
-});
+    style Output fill:none,stroke:none
 ```
 
-### `GraftLoading`
-
-A unique symbol sentinel. Emitted by `subscribe()` when an async component or lazy source hasn't produced a value yet. See [Loading and error states](#loading-and-error-states).
-
-### `isGraftError(value)`
-
-Type guard that checks if a value is a `GraftError` sentinel. Returns `true` for error objects produced by async component rejections. See [Loading and error states](#loading-and-error-states).
-
-## Chaining compositions
-
-`compose` returns a graft component, so you can compose again. Each step satisfies one more input, and the unsatisfied inputs keep bubbling up.
-
 ```tsx
-const Display = component({
-  input: z.object({ msg: z.string() }),
-  output: View,
-  run: ({ msg }) => <p>{msg}</p>,
+import { z } from "zod/v4";
+import { component, compose, source, toReact, View } from "graftjs";
+
+const PriceFeed = source({
+  output: z.number(),
+  run: (emit) => {
+    const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
+    ws.onmessage = (e) => emit(Number(JSON.parse(e.data).p));
+    return () => ws.close();
+  },
 });
 
-const Format = component({
-  input: z.object({ greeting: z.string(), name: z.string() }),
+const CoinName = component({
+  input: z.object({ coinId: z.string() }),
   output: z.string(),
-  run: ({ greeting, name }) => `${greeting}, ${name}!`,
+  run: async ({ coinId }) => {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false`,
+    );
+    return (await res.json()).name;
+  },
 });
 
-const MakeGreeting = component({
-  input: z.object({ prefix: z.string() }),
+const FormatPrice = component({
+  input: z.object({ price: z.number() }),
   output: z.string(),
-  run: ({ prefix }) => `${prefix} says`,
+  run: ({ price }) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price),
 });
 
-// Step 1: Format feeds into Display's "msg"
-// Remaining inputs: { greeting, name }
-const Step1 = compose({ into: Display, from: Format, key: "msg" });
-
-// Step 2: MakeGreeting feeds into Step1's "greeting"
-// Remaining inputs: { prefix, name }
-const Step2 = compose({ into: Step1, from: MakeGreeting, key: "greeting" });
-
-const App = toReact(Step2);
-
-<App prefix="Alice" name="Bob" />
-// Renders: <p>Alice says, Bob!</p>
-```
-
-Each `compose` call is like drawing one edge in a dependency graph. The final component is the whole graph, with only the unconnected inputs exposed as props.
-
-## A more realistic example
-
-Consider a user profile page that needs data from multiple sources:
-
-```tsx
-// --- Visual component ---
-
-const ProfilePage = component({
-  input: z.object({
-    name: z.string(),
-    email: z.string(),
-    postCount: z.number(),
-    avatarUrl: z.string(),
-  }),
+const Header = component({
+  input: z.object({ name: z.string() }),
   output: View,
-  run: ({ name, email, postCount, avatarUrl }) => (
+  run: ({ name }) => <h1>{name}</h1>,
+});
+
+const PriceCard = component({
+  input: z.object({ header: View, displayPrice: z.string() }),
+  output: View,
+  run: ({ header, displayPrice }) => (
     <div>
-      <img src={avatarUrl} alt={name} />
-      <h1>{name}</h1>
-      <p>{email}</p>
-      <p>{postCount} posts</p>
+      {header}
+      <span>{displayPrice}</span>
     </div>
   ),
 });
 
-// --- Data components ---
+const LivePrice = compose({ into: FormatPrice, from: PriceFeed, key: "price" });
+const NamedHeader = compose({ into: Header, from: CoinName, key: "name" });
 
-const UserInfo = component({
-  input: z.object({ userId: z.string() }),
-  output: z.object({ name: z.string(), email: z.string() }),
-  run: ({ userId }) => db.getUser(userId),
-});
-
-const PostCount = component({
-  input: z.object({ userId: z.string() }),
-  output: z.number(),
-  run: ({ userId }) => db.countPosts(userId),
-});
-
-const Avatar = component({
-  input: z.object({ email: z.string() }),
-  output: z.string(),
-  run: ({ email }) => `https://gravatar.com/avatar/${hash(email)}`,
-});
-
-const ExtractName = component({
-  input: z.object({ userInfo: z.object({ name: z.string(), email: z.string() }) }),
-  output: z.string(),
-  run: ({ userInfo }) => userInfo.name,
-});
-
-const ExtractEmail = component({
-  input: z.object({ userInfo: z.object({ name: z.string(), email: z.string() }) }),
-  output: z.string(),
-  run: ({ userInfo }) => userInfo.email,
-});
-
-// --- Wiring ---
-
-const WithUserData = compose({
-  into: ProfilePage,
-  from: {
-    postCount: PostCount,
-    avatarUrl: Avatar,
-    name: ExtractName,
-    email: ExtractEmail,
-  },
-});
-// Inputs: { userId, email, userInfo }
-
-const WithUserInfo = compose({ into: WithUserData, from: UserInfo, key: "userInfo" });
-// Inputs: { userId, email }
-// (email is needed by Avatar directly and by UserInfo → ExtractEmail)
-
-const ProfilePageReact = toReact(WithUserInfo);
-
-// The only input left is userId — everything else is wired internally
-<ProfilePageReact userId="u123" />
-```
-
-## Runtime validation
-
-Every input is validated at runtime using the zod schemas you defined. If an input is missing or has the wrong type, you get a clear `ZodError` at render time — not a silent `undefined` propagating through your component tree.
-
-```tsx
 const App = toReact(
-  component({
-    input: z.object({ count: z.number() }),
-    output: View,
-    run: ({ count }) => <span>{count}</span>,
-  }),
+  compose({ into: PriceCard, from: { displayPrice: LivePrice, header: NamedHeader } }),
 );
 
-// This throws a ZodError at runtime:
-<App count="not a number" />
-// ZodError: Invalid input: expected number, received string
+// One prop left — everything else is wired internally
+<App coinId="bitcoin" />
 ```
+
+<p align="center">
+  <img src="demo.gif" alt="Live crypto price card demo" width="600" />
+</p>
+
+## What you get
+
+- **No dependency arrays.** There are no hooks, so there are no stale closures and no rules-of-hooks footguns.
+- **No unnecessary re-renders.** Value changes only propagate along explicit `compose()` edges. If source A feeds component X and source B feeds component Y, A changing has zero effect on Y. This isn't an optimization — graft simply doesn't have a mechanism to cascade re-renders.
+- **No prop drilling.** Need to wire a data source into a deeply nested component? Just `compose()` it directly. No touching the components in between.
+- **Runtime type safety.** Every `compose` boundary validates with zod. A type mismatch gives you a clear `ZodError` at the boundary where it happened — not a silent `undefined` propagating through your tree.
+- **Async just works.** Make `run` async and loading states propagate automatically. Errors short-circuit downstream. No `useEffect`, no `isLoading` boilerplate.
+- **Every piece is independently testable.** Components are just functions — call `run()` directly with plain objects, no render harness needed.
+
+The idea comes from [graph programming](https://uriva.github.io/blog/graph-programming.html). It's a runtime library, not a compiler plugin. ~400 lines of code, zero dependencies beyond React and zod.
 
 ## Loading and error states
 
-When a component in a graph is async, the graph needs to handle the time before the value arrives and the case where it fails. Graft does this with two sentinel values that flow through the graph like regular data.
+When a component is async, graft handles the in-between time with two sentinels that flow through the graph like regular data.
 
-### `GraftLoading`
+**`GraftLoading`** — emitted when a value isn't available yet. Async components emit it immediately, then the resolved value. Sources emit it until their first `emit()` call. `compose` short-circuits on loading — downstream `run` functions aren't called. `toReact` renders `null`.
 
-A unique symbol emitted by `subscribe()` when a value is not yet available:
-
-- **Async components** emit `GraftLoading` immediately, then the resolved value.
-- **Sources** that don't call `emit` synchronously in their `run` function emit `GraftLoading` until the first `emit`.
-- **Sync components** and **state** never emit `GraftLoading` — they always have a value immediately.
-
-When `compose` sees `GraftLoading` from `from`, it short-circuits — `into`'s `run` is **not** called, and `GraftLoading` is passed through to the outer subscriber. This means loading propagates through the entire chain automatically.
-
-`toReact` renders `null` for `GraftLoading`.
-
-### `GraftError`
-
-A branded object `{ _tag: Symbol("GraftError"), error: unknown }` that carries a caught error through the graph:
-
-- **Async components** that reject produce a `GraftError` containing the rejection reason.
-- Like `GraftLoading`, errors short-circuit through `compose` without calling downstream `run` functions.
-- `toReact` renders `null` for `GraftError`.
+**`GraftError`** — wraps a caught error from an async rejection. Like loading, it short-circuits through `compose`. `toReact` renders `null`.
 
 ```tsx
-import { GraftLoading, isGraftError } from "graft";
+import { GraftLoading, isGraftError } from "graftjs";
 
 const AsyncData = component({
   input: z.object({ id: z.string() }),
@@ -540,39 +300,11 @@ AsyncData.subscribe({ id: "123" }, (value) => {
 });
 ```
 
-The `run()` function is unaffected — it returns the raw `Promise` that rejects normally. The sentinel system only applies to `subscribe()` and `toReact()`.
-
-**Note:** `state()` never produces sentinels. It always has a value (the initial value), and the setter updates it synchronously. This is by design — state is always "ready".
+`state()` never produces sentinels — it always has a value (the initial value).
 
 ## Deduplication
 
-`compose` deduplicates emissions from `from` using reference equality (`===`). When `from` emits the same value it emitted last time, the re-subscription to `into` is skipped entirely — `into`'s `run` is never called, and no value propagates downstream.
-
-This means:
-- A source spamming the same primitive (e.g., a timer re-emitting `0`) doesn't cause unnecessary work.
-- Calling a state setter with the current value is a no-op for downstream subscribers.
-- Consecutive `GraftLoading` sentinels are collapsed into one.
-
-Reference equality is intentional. Two different objects with identical content (`{ x: 1 } !== { x: 1 }`) are *not* deduped — this matches React's behavior and avoids the cost and surprises of deep comparison.
-
-## No unnecessary re-renders
-
-In React, when a parent re-renders, all its children re-render too — unless you manually opt out with `memo`, `useMemo`, `useCallback`, etc. A state change at the top of the tree cascades through every child, even ones that don't use that state. Preventing unnecessary renders is a constant tax on the developer.
-
-Graft doesn't have this problem. A value change only propagates along the explicit `compose()` edges. If source A feeds into component X, and source B feeds into component Y, then A changing has zero effect on Y — there's no shared tree to cascade through. Each component only re-runs when its actual inputs change.
-
-This isn't an optimization. It's a structural property of the architecture — graft simply doesn't have a mechanism to produce unnecessary re-renders in the first place.
-
-## How it works
-
-Graft is a runtime library, not a compiler plugin. `compose()` is a regular function call that:
-
-1. Takes `into`'s input schema and removes the key being wired
-2. Merges the remaining shape with `from`'s input schema
-3. Returns a new graft component with the merged schema
-4. At render time, splits the incoming props, runs `from`, and passes the result to `into`
-
-The type-level generics ensure TypeScript knows exactly what inputs the composed component needs. The runtime zod validation ensures the types are enforced even in JavaScript or at module boundaries.
+`compose` deduplicates emissions from `from` using reference equality (`===`). If `from` emits the same value twice in a row, `into`'s `run` isn't called and nothing propagates downstream. This means a source spamming the same primitive is a no-op, and calling a state setter with the current value is free.
 
 ## Install
 
