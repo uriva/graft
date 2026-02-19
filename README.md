@@ -9,6 +9,8 @@
  ▀████▀▀
 ```
 
+> _**graft** /ɡrɑːft/ — a horticultural technique that joins tissues from two plants so they grow together as one._
+
 _The smallest API imaginable._
 
 # graft
