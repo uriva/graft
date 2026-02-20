@@ -20,6 +20,6 @@ export function fromReact<S extends z.ZodObject<z.ZodRawShape>>(
   return component({
     input: schema,
     output: View,
-    run: (props: z.infer<S>) => <Component {...props} />,
+    run: (props) => <Component {...(props as z.infer<S>)} />,
   });
 }
