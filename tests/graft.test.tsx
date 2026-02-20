@@ -8,6 +8,7 @@ import {
   component,
   compose,
   emitter,
+  fromReact,
   instantiate,
   isGraftError,
   isGraftLoading,
@@ -2399,5 +2400,62 @@ describe("status option", () => {
     assert.deepEqual(values, ["loading", "v:10", "v:20"]);
 
     cleanup();
+  });
+});
+
+describe("fromReact", () => {
+  it("wraps a React component into a GraftComponent", () => {
+    const MyButton: React.FC<{ label: string }> = ({ label }) => (
+      <button>{label}</button>
+    );
+    const gc = fromReact(MyButton, z.object({ label: z.string() }));
+    assert.equal(gc._tag, "graft-component");
+    assert.ok(gc.schema);
+    assert.ok(gc.run);
+  });
+
+  it("renders the wrapped component via toReact", async () => {
+    const MySpan: React.FC<{ text: string }> = ({ text }) => (
+      <span data-testid="fr-wrapped">{text}</span>
+    );
+    const Wrapped = fromReact(MySpan, z.object({ text: z.string() }));
+    const ReactComp = toReact(Wrapped);
+    await act(async () => {
+      render(<ReactComp text="hello from fromReact" />);
+    });
+    const el = screen.getByTestId("fr-wrapped");
+    assert.equal(el.textContent, "hello from fromReact");
+  });
+
+  it("works in compose chains", async () => {
+    const Label: React.FC<{ value: string }> = ({ value }) => (
+      <span data-testid="fr-label">{value}</span>
+    );
+    const GraftLabel = fromReact(Label, z.object({ value: z.string() }));
+
+    const shout = component({
+      input: z.object({ text: z.string() }),
+      output: z.string(),
+      run: ({ text }) => text.toUpperCase(),
+    });
+
+    const composed = compose({
+      into: GraftLabel,
+      from: shout,
+      key: "value",
+    });
+
+    const ReactComp = toReact(composed);
+    await act(async () => {
+      render(<ReactComp text="quiet" />);
+    });
+    const el = screen.getByTestId("fr-label");
+    assert.equal(el.textContent, "QUIET");
+  });
+
+  it("has empty statusKeys", () => {
+    const Comp: React.FC<{ x: number }> = ({ x }) => <div>{x}</div>;
+    const gc = fromReact(Comp, z.object({ x: z.number() }));
+    assert.equal(gc.statusKeys.size, 0);
   });
 });

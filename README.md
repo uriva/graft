@@ -184,6 +184,23 @@ const App = toReact(FormattedPrice);
 <App price={42000} />;
 ```
 
+### fromReact wraps existing React components
+
+Have a React component you want to use in a graft graph? `fromReact` wraps it:
+
+```tsx
+import { fromReact } from "graftjs";
+import DatePicker from "react-datepicker";
+
+const GraftDatePicker = fromReact(
+  DatePicker,
+  z.object({ selected: z.date(), onChange: z.function() }),
+);
+
+// Now compose it like any other graft component
+const App = compose({ into: GraftDatePicker, from: SelectedDate, key: "selected" });
+```
+
 ### emitters
 
 In React you'd use `useEffect` + `useState` for a WebSocket, a timer, or a
