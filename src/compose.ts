@@ -68,6 +68,18 @@ function splitProps<
  * `into`'s run/subscribe.
  */
 
+// Future-edge overload
+export function compose<
+  S extends z.ZodObject<z.ZodRawShape>,
+  K extends string & keyof z.infer<S>,
+  O,
+>({ into, key, future, initial }: {
+  into: GraftComponent<S, O>;
+  key: K;
+  future: true;
+  initial: O;
+}): GraftComponent<z.ZodObject<Omit<S["shape"], K>>, O>;
+
 // Multi-wire overload
 export function compose<
   SA extends z.ZodObject<z.ZodRawShape>,
@@ -94,13 +106,20 @@ export function compose<
 >;
 
 // Implementation
-export function compose({ into, from, key }: {
+export function compose({ into, from, key, future, initial }: {
   into: GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>;
-  from:
+  from?:
     | GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>
     | Record<string, GraftComponent<z.ZodObject<z.ZodRawShape>, unknown>>;
   key?: string;
+  future?: boolean;
+  initial?: unknown;
 }): GraftComponent<z.ZodObject<z.ZodRawShape>, unknown> {
+  // Future-edge form: output feeds back to own input
+  if (future) {
+    return composeFutureImpl(into, key!, initial);
+  }
+
   // Multi-wire form: from is a Record<string, GraftComponent>
   if (
     !key && typeof from === "object" && from !== null &&
@@ -141,6 +160,28 @@ function composeSingle<
   // Build the new schema: into's shape minus key, plus from's shape
   const intoShape = { ...into.schema.shape };
   delete (intoShape as Record<string, unknown>)[key];
+
+  // Check for overlapping keys with incompatible types.
+  // When both `into` and `from` have a remaining input with the same name,
+  // the value is provided once and routed to both sides. This only works
+  // if both schemas accept the same type for that key.
+  for (const k of Object.keys(from.schema.shape)) {
+    if (!(k in intoShape)) continue;
+    const intoType = intoShape[k as keyof typeof intoShape];
+    const fromType = from.schema.shape[k];
+    // Compare the underlying zod type constructors as a fast compatibility check.
+    if (
+      intoType.constructor !== fromType.constructor ||
+      intoType._zod.def.type !== fromType._zod.def.type
+    ) {
+      throw new Error(
+        `compose: overlapping input key "${k}" has incompatible types in ` +
+          `"into" and "from". Both components expose "${k}" as a remaining ` +
+          `input, but their schemas differ. Rename one to disambiguate.`,
+      );
+    }
+  }
+
   const newShape = { ...intoShape, ...from.schema.shape };
   const newSchema = z.object(newShape) as z.ZodObject<z.ZodRawShape>;
 
@@ -232,6 +273,77 @@ function composeSingle<
     _tag: "graft-component",
     schema: newSchema,
     outputSchema: into.outputSchema,
+    statusKeys: new Set<string>(),
+    run,
+    subscribe,
+  };
+}
+
+/**
+ * composeFutureImpl — feedback edge implementation.
+ *
+ * Connects `from`'s output back to its own input named `key`, delayed
+ * by one step. The first invocation uses `initial`. Each subsequent
+ * invocation uses the output of the previous run.
+ *
+ * A change in the feedback value does NOT trigger a re-run. Only
+ * upstream changes (new props or emitter emissions) cause re-runs.
+ * The feedback value is read passively at the start of each invocation.
+ * This makes loops impossible by construction.
+ *
+ * The `key` input is removed from the composed component's schema.
+ * `initial` is validated against the output schema at construction time.
+ */
+function composeFutureImpl<O>(
+  from: GraftComponent<z.ZodObject<z.ZodRawShape>, O>,
+  key: string,
+  initial: unknown,
+): GraftComponent<z.ZodObject<z.ZodRawShape>, O> {
+  // Validate initial against the output schema.
+  from.outputSchema.parse(initial);
+
+  // Build new schema: from's shape minus the feedback key.
+  const newShape = { ...from.schema.shape };
+  delete (newShape as Record<string, unknown>)[key];
+  const newSchema = z.object(newShape) as z.ZodObject<z.ZodRawShape>;
+
+  let acc: O = initial as O;
+
+  const run = (
+    props: z.infer<typeof newSchema>,
+  ): MaybePromise<O> => {
+    const fullProps = { ...props, [key]: acc };
+    const result = from.run(fullProps);
+    if (isPromise(result)) {
+      return result.then((v) => {
+        acc = v;
+        return v;
+      });
+    }
+    acc = result;
+    return result;
+  };
+
+  const subscribe = (
+    props: z.infer<typeof newSchema>,
+    cb: (value: O | typeof GraftLoading | GraftError) => void,
+  ): Cleanup => {
+    const fullProps = { ...props, [key]: acc };
+    return from.subscribe(
+      fullProps,
+      (value: O | typeof GraftLoading | GraftError) => {
+        if (!isSentinel(value)) {
+          acc = value;
+        }
+        cb(value);
+      },
+    );
+  };
+
+  return {
+    _tag: "graft-component",
+    schema: newSchema,
+    outputSchema: from.outputSchema,
     statusKeys: new Set<string>(),
     run,
     subscribe,

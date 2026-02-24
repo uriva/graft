@@ -170,6 +170,68 @@ const App = compose({
 });
 ```
 
+### Overlapping input keys
+
+When `into` and `from` share a remaining input with the same key name, graft
+merges them into a single prop. The caller provides it once and the value is
+routed to both sides.
+
+```tsx
+const Header = component({
+  input: z.object({ userId: z.string() }),
+  output: View,
+  run: ({ userId }) => <h1>User {userId}</h1>,
+});
+
+const Body = component({
+  input: z.object({ userId: z.string() }),
+  output: z.string(),
+  run: ({ userId }) => `Profile for ${userId}`,
+});
+
+const Layout = component({
+  input: z.object({ header: View, body: z.string(), userId: z.string() }),
+  output: View,
+  run: ({ header, body, userId }) => (
+    <div data-user={userId}>{header}<p>{body}</p></div>
+  ),
+});
+
+const Page = compose({
+  into: Layout,
+  from: { header: Header, body: Body },
+});
+
+// Page needs only { userId: string } — one prop feeds all three components
+<Page userId="alice" />;
+```
+
+This works because all three schemas define `userId` as `z.string()`. The
+value is provided once and passed to `Header`, `Body`, and `Layout`.
+
+If the overlapping key has **incompatible types** in `into` and `from`, graft
+throws at compose time:
+
+```tsx
+const A = component({
+  input: z.object({ x: z.number() }),
+  output: z.string(),
+  run: ({ x }) => String(x),
+});
+
+const B = component({
+  input: z.object({ x: z.string(), val: z.string() }),
+  output: z.string(),
+  run: ({ x, val }) => `${x}:${val}`,
+});
+
+// Throws: overlapping input key "x" has incompatible types
+compose({ into: B, from: A, key: "val" });
+```
+
+Rename one of the keys to disambiguate.
+```
+
 ### toReact converts to a regular React component
 
 Existing react apps can adopt gradually - `toReact` gives you a standard
@@ -298,6 +360,89 @@ const TextField = () => {
 const NameField = instantiate(TextField);
 const EmailField = instantiate(TextField);
 ```
+
+### Future edges feed output back as input
+
+Some computations need their previous result — accumulators, reducers, running
+totals. Instead of adding a new node type, graft expresses this as a feedback
+edge in the graph. Pass `future: true` to `compose`:
+
+`compose({ into, key, future: true, initial })` connects `into`'s output back
+to its own input named `key`, delayed by one step. The first invocation uses
+`initial`. Each subsequent invocation uses the previous output. The `key` is
+removed from the composed component's schema — it's internally satisfied.
+
+The component stays a pure function. The statefulness lives in the graph
+topology.
+
+```tsx
+import { z } from "zod/v4";
+import { component, compose } from "graftjs";
+
+const Adder = component({
+  input: z.object({ event: z.number(), acc: z.number() }),
+  output: z.number(),
+  run: ({ event, acc }) => acc + event,
+});
+
+// Output feeds back to "acc", starting at 0
+const RunningTotal = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+// RunningTotal input: { event: z.number() }, output: z.number()
+
+RunningTotal.run({ event: 5 }); // 5
+RunningTotal.run({ event: 3 }); // 8
+RunningTotal.run({ event: 2 }); // 10
+```
+
+It composes with emitters the same way everything else does:
+
+```tsx
+import { z } from "zod/v4";
+import { component, compose, emitter } from "graftjs";
+
+const ClickStream = emitter({
+  output: z.number(),
+  run: (emit) => {
+    document.addEventListener("click", () => emit(1));
+    return () => {};
+  },
+});
+
+const ClickCounter = compose({
+  into: component({
+    input: z.object({ click: z.number(), total: z.number() }),
+    output: z.number(),
+    run: ({ click, total }) => total + click,
+  }),
+  key: "total",
+  future: true,
+  initial: 0,
+});
+
+const LiveCount = compose({
+  into: ClickCounter,
+  from: ClickStream,
+  key: "click",
+});
+
+// LiveCount has no inputs — fully wired
+LiveCount.subscribe({}, (count) => console.log("clicks:", count));
+```
+
+`initial` is validated against the component's output schema at construction
+time. If it doesn't match, you get a `ZodError` immediately.
+
+Use `instantiate` with a future edge to get independent accumulators per
+subscription — each instance starts fresh from `initial`.
+
+#### No loops by construction
+
+A change in the feedback value alone never triggers a re-run. The feedback value
+is read passively at the start of each invocation — it doesn't act as a
+subscription source. Only upstream changes (new props or emitter emissions) cause
+re-runs. This means infinite loops are impossible by construction. The output of
+one run updates the accumulator, but that update is inert until the next external
+trigger arrives.
 
 ## Full example
 
@@ -475,6 +620,12 @@ You can list multiple keys: `status: ["price", "name"]`.
 If `from` emits the same value twice in a row, `into`'s `run` isn't called and
 nothing propagates downstream. This means an emitter spamming the same primitive
 is a no-op, and calling a state setter with the current value is free.
+
+If you want individual events counted (e.g. button clicks, incoming messages),
+model them as distinct values — for instance by attaching a timestamp or
+incrementing counter. Reference equality means two separate `{ type: "click" }`
+objects _will_ propagate (different references), but two emissions of the same
+primitive `1` in a row won't.
 
 ## Eagerness and future laziness
 

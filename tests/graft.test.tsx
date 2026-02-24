@@ -166,7 +166,7 @@ describe("compose", () => {
     assert.equal(screen.getByTestId("msg").textContent, "Alice says, Bob!");
   });
 
-  it("handles shared parameter names between components", () => {
+  it("throws when shared parameter names have incompatible types", () => {
     const A = component({
       input: z.object({ x: z.string(), result: z.number() }),
       output: View,
@@ -184,10 +184,12 @@ describe("compose", () => {
     });
 
     // Compose: B feeds into A's "result"
-    // Both have "x" — B's x (number) overwrites A's x (string) in the merged shape
-    const Composed = compose({ into: A, from: B, key: "result" });
-    const shapeKeys = Object.keys(Composed.schema.shape).sort();
-    assert.deepEqual(shapeKeys, ["x"]);
+    // Both have "x" but with different types — should throw
+    assert.throws(
+      () => compose({ into: A, from: B, key: "result" }),
+      (err: unknown) =>
+        err instanceof Error && /overlapping input key "x"/.test(err.message),
+    );
   });
 
   it("embeds a View-returning component inside another View component", () => {
@@ -2457,5 +2459,434 @@ describe("fromReact", () => {
     const Comp: React.FC<{ x: number }> = ({ x }) => <div>{x}</div>;
     const gc = fromReact(Comp, z.object({ x: z.number() }));
     assert.equal(gc.statusKeys.size, 0);
+  });
+});
+
+describe("compose with overlapping input keys", () => {
+  it("same key, same type: one prop feeds both sides (run)", () => {
+    const Left = component({
+      input: z.object({ userId: z.string() }),
+      output: z.string(),
+      run: ({ userId }) => `left:${userId}`,
+    });
+    const Right = component({
+      input: z.object({ userId: z.string(), left: z.string() }),
+      output: z.string(),
+      run: ({ userId, left }) => `${left}|right:${userId}`,
+    });
+    const Composed = compose({ into: Right, from: Left, key: "left" });
+    // Composed should have a single `userId` prop, not two.
+    const keys = Object.keys(Composed.schema.shape);
+    assert.deepEqual(keys, ["userId"]);
+    const result = Composed.run({ userId: "u1" });
+    assert.equal(result, "left:u1|right:u1");
+  });
+
+  it("same key, same type: one prop feeds both sides (subscribe)", () => {
+    const Left = component({
+      input: z.object({ tag: z.string() }),
+      output: z.number(),
+      run: ({ tag }) => tag.length,
+    });
+    const Right = component({
+      input: z.object({ tag: z.string(), len: z.number() }),
+      output: z.string(),
+      run: ({ tag, len }) => `${tag}=${len}`,
+    });
+    const Composed = compose({ into: Right, from: Left, key: "len" });
+    assert.deepEqual(Object.keys(Composed.schema.shape), ["tag"]);
+    const values: string[] = [];
+    Composed.subscribe({ tag: "hello" }, (v) => {
+      if (typeof v === "string") values.push(v);
+    });
+    assert.equal(values.length, 1);
+    assert.equal(values[0], "hello=5");
+  });
+
+  it("same key, same type in multi-wire compose", () => {
+    const A = component({
+      input: z.object({ userId: z.string() }),
+      output: z.string(),
+      run: ({ userId }) => `A:${userId}`,
+    });
+    const B = component({
+      input: z.object({ userId: z.string() }),
+      output: z.number(),
+      run: ({ userId }) => userId.length,
+    });
+    const Into = component({
+      input: z.object({ a: z.string(), b: z.number(), userId: z.string() }),
+      output: z.string(),
+      run: ({ a, b, userId }) => `${a}|${b}|${userId}`,
+    });
+    const Composed = compose({ into: Into, from: { a: A, b: B } });
+    assert.deepEqual(Object.keys(Composed.schema.shape).sort(), ["userId"]);
+    const result = Composed.run({ userId: "xyz" });
+    assert.equal(result, "A:xyz|3|xyz");
+  });
+
+  it("throws at compose time when overlapping keys have different types", () => {
+    const Left = component({
+      input: z.object({ x: z.number() }),
+      output: z.string(),
+      run: ({ x }) => String(x),
+    });
+    const Right = component({
+      input: z.object({ x: z.string(), val: z.string() }),
+      output: z.string(),
+      run: ({ x, val }) => `${x}:${val}`,
+    });
+    assert.throws(
+      () => compose({ into: Right, from: Left, key: "val" }),
+      (err: unknown) =>
+        err instanceof Error && /overlapping input key "x"/.test(err.message),
+    );
+  });
+
+  it("throws on conflicting types in multi-wire compose", () => {
+    const A = component({
+      input: z.object({ x: z.number() }),
+      output: z.string(),
+      run: ({ x }) => String(x),
+    });
+    const B = component({
+      input: z.object({ x: z.string() }),
+      output: z.number(),
+      run: ({ x }) => x.length,
+    });
+    const Into = component({
+      input: z.object({ a: z.string(), b: z.number() }),
+      output: z.string(),
+      run: ({ a, b }) => `${a}:${b}`,
+    });
+    assert.throws(
+      () => compose({ into: Into, from: { a: A, b: B } }),
+      (err: unknown) =>
+        err instanceof Error && /overlapping input key "x"/.test(err.message),
+    );
+  });
+
+  it("no conflict when overlapping key is the wired key itself", () => {
+    // Both have key "out" but it's being wired, so it's removed from into's shape
+    const From = component({
+      input: z.object({ out: z.string() }),
+      output: z.number(),
+      run: ({ out }) => out.length,
+    });
+    const Into = component({
+      input: z.object({ out: z.number() }),
+      output: z.string(),
+      run: ({ out }) => `len=${out}`,
+    });
+    // This should not throw — "out" is the wired key, removed from into's shape
+    const Composed = compose({ into: Into, from: From, key: "out" });
+    assert.deepEqual(Object.keys(Composed.schema.shape), ["out"]);
+    assert.equal(Composed.run({ out: "hi" }), "len=2");
+  });
+});
+
+describe("composeFuture", () => {
+  it("basic accumulation with run", () => {
+    const Adder = component({
+      input: z.object({ event: z.number(), acc: z.number() }),
+      output: z.number(),
+      run: ({ event, acc }) => acc + event,
+    });
+    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+
+    // Schema should only have "event", not "acc"
+    assert.deepEqual(Object.keys(Counter.schema.shape), ["event"]);
+
+    assert.equal(Counter.run({ event: 5 }), 5); // 0 + 5
+    assert.equal(Counter.run({ event: 3 }), 8); // 5 + 3
+    assert.equal(Counter.run({ event: 2 }), 10); // 8 + 2
+  });
+
+  it("basic accumulation with subscribe", () => {
+    const Adder = component({
+      input: z.object({ event: z.number(), acc: z.number() }),
+      output: z.number(),
+      run: ({ event, acc }) => acc + event,
+    });
+    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+
+    const values: number[] = [];
+    Counter.subscribe({ event: 10 }, (v) => {
+      if (typeof v === "number") values.push(v);
+    });
+    assert.deepEqual(values, [10]); // 0 + 10
+
+    Counter.subscribe({ event: 7 }, (v) => {
+      if (typeof v === "number") values.push(v);
+    });
+    assert.deepEqual(values, [10, 17]); // 10 + 7
+  });
+
+  it("composed with upstream emitter", () => {
+    type ClickEvent = { ts: number; delta: number };
+    let emitClick: ((v: ClickEvent) => void) | null = null;
+
+    const Clicks = emitter({
+      output: z.object({ ts: z.number(), delta: z.number() }),
+      run: (emit) => {
+        emitClick = emit;
+        return () => { emitClick = null; };
+      },
+    });
+
+    const Adder = component({
+      input: z.object({ event: z.object({ ts: z.number(), delta: z.number() }), acc: z.number() }),
+      output: z.number(),
+      run: ({ event, acc }) => acc + event.delta,
+    });
+
+    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const ClickCounter = compose({ into: Counter, from: Clicks, key: "event" });
+
+    const values: unknown[] = [];
+    ClickCounter.subscribe({}, (v) => values.push(v));
+
+    // Before any click: GraftLoading
+    assert.equal(values.length, 1);
+    assert.ok(isGraftLoading(values[0]));
+
+    // First click
+    emitClick!({ ts: 1, delta: 1 });
+    assert.equal(values.length, 2);
+    assert.equal(values[1], 1);
+
+    // Second click
+    emitClick!({ ts: 2, delta: 1 });
+    assert.equal(values.length, 3);
+    assert.equal(values[2], 2);
+
+    // Third click with different delta
+    emitClick!({ ts: 3, delta: 5 });
+    assert.equal(values.length, 4);
+    assert.equal(values[3], 7);
+  });
+
+  it("works with async run", async () => {
+    const AsyncAdder = component({
+      input: z.object({ event: z.number(), acc: z.number() }),
+      output: z.number(),
+      run: async ({ event, acc }) => {
+        await new Promise((r) => setTimeout(r, 1));
+        return acc + event;
+      },
+    });
+    const Counter = compose({ into: AsyncAdder, key: "acc", future: true, initial: 0 });
+
+    const r1 = await Counter.run({ event: 3 });
+    assert.equal(r1, 3);
+    const r2 = await Counter.run({ event: 7 });
+    assert.equal(r2, 10);
+  });
+
+  it("async subscribe emits GraftLoading then value", async () => {
+    const AsyncAdder = component({
+      input: z.object({ event: z.number(), acc: z.number() }),
+      output: z.number(),
+      run: async ({ event, acc }) => {
+        await new Promise((r) => setTimeout(r, 5));
+        return acc + event;
+      },
+    });
+    const Counter = compose({ into: AsyncAdder, key: "acc", future: true, initial: 0 });
+
+    const values: unknown[] = [];
+    Counter.subscribe({ event: 4 }, (v) => values.push(v));
+
+    // Should have GraftLoading immediately
+    assert.equal(values.length, 1);
+    assert.ok(isGraftLoading(values[0]));
+
+    // Wait for async
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(values.length, 2);
+    assert.equal(values[1], 4);
+  });
+
+  it("instantiate creates independent accumulators", () => {
+    const template = () => {
+      const Adder = component({
+        input: z.object({ event: z.number(), acc: z.number() }),
+        output: z.number(),
+        run: ({ event, acc }) => acc + event,
+      });
+      return compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    };
+
+    const CounterA = instantiate(template);
+    const CounterB = instantiate(template);
+
+    const valsA: number[] = [];
+    const valsB: number[] = [];
+
+    // Each subscribe on an instantiated component gets a fresh subgraph
+    CounterA.subscribe({ event: 10 }, (v) => {
+      if (typeof v === "number") valsA.push(v);
+    });
+    CounterB.subscribe({ event: 100 }, (v) => {
+      if (typeof v === "number") valsB.push(v);
+    });
+
+    // Independent: A got 10 (0+10), B got 100 (0+100)
+    assert.deepEqual(valsA, [10]);
+    assert.deepEqual(valsB, [100]);
+  });
+
+  it("validates initial against output schema", () => {
+    const Adder = component({
+      input: z.object({ event: z.number(), acc: z.number() }),
+      output: z.number(),
+      run: ({ event, acc }) => acc + event,
+    });
+    assert.throws(
+      () => compose({ into: Adder, key: "acc", future: true, initial: "not a number" as unknown as number }),
+    );
+  });
+
+  it("accumulates strings", () => {
+    const Concat = component({
+      input: z.object({ word: z.string(), acc: z.string() }),
+      output: z.string(),
+      run: ({ word, acc }) => acc === "" ? word : `${acc} ${word}`,
+    });
+    const Sentence = compose({ into: Concat, key: "acc", future: true, initial: "" });
+
+    assert.equal(Sentence.run({ word: "hello" }), "hello");
+    assert.equal(Sentence.run({ word: "world" }), "hello world");
+    assert.equal(Sentence.run({ word: "!" }), "hello world !");
+  });
+
+  it("accumulates arrays", () => {
+    const Collector = component({
+      input: z.object({ item: z.string(), acc: z.array(z.string()) }),
+      output: z.array(z.string()),
+      run: ({ item, acc }) => [...acc, item],
+    });
+    const Log = compose({ into: Collector, key: "acc", future: true, initial: [] as string[] });
+
+    assert.deepEqual(Log.run({ item: "a" }), ["a"]);
+    assert.deepEqual(Log.run({ item: "b" }), ["a", "b"]);
+    assert.deepEqual(Log.run({ item: "c" }), ["a", "b", "c"]);
+  });
+
+  it("remaining inputs bubble up correctly with multiple keys", () => {
+    const Reducer = component({
+      input: z.object({ x: z.number(), y: z.string(), acc: z.number() }),
+      output: z.number(),
+      run: ({ x, acc }) => acc + x,
+    });
+    const R = compose({ into: Reducer, key: "acc", future: true, initial: 0 });
+
+    // Should have x and y, but not acc
+    const keys = Object.keys(R.schema.shape).sort();
+    assert.deepEqual(keys, ["x", "y"]);
+  });
+
+  it("feedback value change does not trigger re-run (no loops)", () => {
+    let runCount = 0;
+    const Adder = component({
+      input: z.object({ event: z.number(), acc: z.number() }),
+      output: z.number(),
+      run: ({ event, acc }) => {
+        runCount++;
+        return acc + event;
+      },
+    });
+    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+
+    const values: unknown[] = [];
+    Counter.subscribe({ event: 1 }, (v) => values.push(v));
+
+    // subscribe fires run exactly once — the updated acc does NOT cause a second run
+    assert.equal(runCount, 1);
+    assert.deepEqual(values, [1]);
+  });
+
+  it("feedback does not loop when composed with emitter", () => {
+    let runCount = 0;
+    let emitVal: ((v: number) => void) | null = null;
+
+    const Source = emitter({
+      output: z.number(),
+      run: (emit) => {
+        emitVal = emit;
+        return () => { emitVal = null; };
+      },
+    });
+
+    const Adder = component({
+      input: z.object({ event: z.number(), acc: z.number() }),
+      output: z.number(),
+      run: ({ event, acc }) => {
+        runCount++;
+        return acc + event;
+      },
+    });
+
+    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Wired = compose({ into: Counter, from: Source, key: "event" });
+
+    const values: unknown[] = [];
+    Wired.subscribe({}, (v) => values.push(v));
+
+    // GraftLoading from emitter, run not called yet
+    assert.equal(runCount, 0);
+    assert.equal(values.length, 1);
+    assert.ok(isGraftLoading(values[0]));
+
+    // Emit once — run fires exactly once, acc updates but does NOT retrigger
+    emitVal!(5);
+    assert.equal(runCount, 1);
+    assert.equal(values.length, 2);
+    assert.equal(values[1], 5);
+
+    // Emit again — run fires exactly once more, acc=5+3=8, no loop
+    emitVal!(3);
+    assert.equal(runCount, 2);
+    assert.equal(values.length, 3);
+    assert.equal(values[2], 8);
+  });
+
+  it("feedback does not loop even with many rapid emits", () => {
+    let runCount = 0;
+    let emitVal: ((v: { ts: number; delta: number }) => void) | null = null;
+
+    const Source = emitter({
+      output: z.object({ ts: z.number(), delta: z.number() }),
+      run: (emit) => {
+        emitVal = emit;
+        return () => { emitVal = null; };
+      },
+    });
+
+    const Adder = component({
+      input: z.object({ n: z.object({ ts: z.number(), delta: z.number() }), acc: z.number() }),
+      output: z.number(),
+      run: ({ n, acc }) => {
+        runCount++;
+        return acc + n.delta;
+      },
+    });
+
+    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Wired = compose({ into: Counter, from: Source, key: "n" });
+
+    const values: number[] = [];
+    Wired.subscribe({}, (v) => {
+      if (typeof v === "number") values.push(v);
+    });
+
+    // Fire 100 rapid events with distinct refs — each causes exactly one run
+    for (let i = 1; i <= 100; i++) {
+      emitVal!({ ts: i, delta: 1 });
+    }
+
+    assert.equal(runCount, 100);
+    assert.equal(values.length, 100);
+    assert.equal(values[99], 100); // 1+1+1+...+1 = 100
   });
 });
