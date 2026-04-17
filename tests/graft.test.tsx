@@ -2592,7 +2592,12 @@ describe("composeFuture", () => {
       output: z.number(),
       run: ({ event, acc }) => acc + event,
     });
-    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: Adder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
 
     // Schema should only have "event", not "acc"
     assert.deepEqual(Object.keys(Counter.schema.shape), ["event"]);
@@ -2608,7 +2613,12 @@ describe("composeFuture", () => {
       output: z.number(),
       run: ({ event, acc }) => acc + event,
     });
-    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: Adder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
 
     const values: number[] = [];
     Counter.subscribe({ event: 10 }, (v) => {
@@ -2630,17 +2640,27 @@ describe("composeFuture", () => {
       output: z.object({ ts: z.number(), delta: z.number() }),
       run: (emit) => {
         emitClick = emit;
-        return () => { emitClick = null; };
+        return () => {
+          emitClick = null;
+        };
       },
     });
 
     const Adder = component({
-      input: z.object({ event: z.object({ ts: z.number(), delta: z.number() }), acc: z.number() }),
+      input: z.object({
+        event: z.object({ ts: z.number(), delta: z.number() }),
+        acc: z.number(),
+      }),
       output: z.number(),
       run: ({ event, acc }) => acc + event.delta,
     });
 
-    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: Adder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
     const ClickCounter = compose({ into: Counter, from: Clicks, key: "event" });
 
     const values: unknown[] = [];
@@ -2675,7 +2695,12 @@ describe("composeFuture", () => {
         return acc + event;
       },
     });
-    const Counter = compose({ into: AsyncAdder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: AsyncAdder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
 
     const r1 = await Counter.run({ event: 3 });
     assert.equal(r1, 3);
@@ -2692,7 +2717,12 @@ describe("composeFuture", () => {
         return acc + event;
       },
     });
-    const Counter = compose({ into: AsyncAdder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: AsyncAdder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
 
     const values: unknown[] = [];
     Counter.subscribe({ event: 4 }, (v) => values.push(v));
@@ -2743,7 +2773,13 @@ describe("composeFuture", () => {
       run: ({ event, acc }) => acc + event,
     });
     assert.throws(
-      () => compose({ into: Adder, key: "acc", future: true, initial: "not a number" as unknown as number }),
+      () =>
+        compose({
+          into: Adder,
+          key: "acc",
+          future: true,
+          initial: "not a number" as unknown as number,
+        }),
     );
   });
 
@@ -2753,7 +2789,12 @@ describe("composeFuture", () => {
       output: z.string(),
       run: ({ word, acc }) => acc === "" ? word : `${acc} ${word}`,
     });
-    const Sentence = compose({ into: Concat, key: "acc", future: true, initial: "" });
+    const Sentence = compose({
+      into: Concat,
+      key: "acc",
+      future: true,
+      initial: "",
+    });
 
     assert.equal(Sentence.run({ word: "hello" }), "hello");
     assert.equal(Sentence.run({ word: "world" }), "hello world");
@@ -2766,7 +2807,12 @@ describe("composeFuture", () => {
       output: z.array(z.string()),
       run: ({ item, acc }) => [...acc, item],
     });
-    const Log = compose({ into: Collector, key: "acc", future: true, initial: [] as string[] });
+    const Log = compose({
+      into: Collector,
+      key: "acc",
+      future: true,
+      initial: [] as string[],
+    });
 
     assert.deepEqual(Log.run({ item: "a" }), ["a"]);
     assert.deepEqual(Log.run({ item: "b" }), ["a", "b"]);
@@ -2796,7 +2842,12 @@ describe("composeFuture", () => {
         return acc + event;
       },
     });
-    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: Adder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
 
     const values: unknown[] = [];
     Counter.subscribe({ event: 1 }, (v) => values.push(v));
@@ -2814,7 +2865,9 @@ describe("composeFuture", () => {
       output: z.number(),
       run: (emit) => {
         emitVal = emit;
-        return () => { emitVal = null; };
+        return () => {
+          emitVal = null;
+        };
       },
     });
 
@@ -2827,7 +2880,12 @@ describe("composeFuture", () => {
       },
     });
 
-    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: Adder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
     const Wired = compose({ into: Counter, from: Source, key: "event" });
 
     const values: unknown[] = [];
@@ -2859,12 +2917,17 @@ describe("composeFuture", () => {
       output: z.object({ ts: z.number(), delta: z.number() }),
       run: (emit) => {
         emitVal = emit;
-        return () => { emitVal = null; };
+        return () => {
+          emitVal = null;
+        };
       },
     });
 
     const Adder = component({
-      input: z.object({ n: z.object({ ts: z.number(), delta: z.number() }), acc: z.number() }),
+      input: z.object({
+        n: z.object({ ts: z.number(), delta: z.number() }),
+        acc: z.number(),
+      }),
       output: z.number(),
       run: ({ n, acc }) => {
         runCount++;
@@ -2872,7 +2935,12 @@ describe("composeFuture", () => {
       },
     });
 
-    const Counter = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+    const Counter = compose({
+      into: Adder,
+      key: "acc",
+      future: true,
+      initial: 0,
+    });
     const Wired = compose({ into: Counter, from: Source, key: "n" });
 
     const values: number[] = [];

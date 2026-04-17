@@ -9,7 +9,8 @@
  ▀████▀▀
 ```
 
-> _**graft** /ɡrɑːft/ — a horticultural technique that joins tissues from two plants so they grow together as one._
+> _**graft** /ɡrɑːft/ — a horticultural technique that joins tissues from two
+> plants so they grow together as one._
 
 _The smallest API imaginable._
 
@@ -193,7 +194,10 @@ const Layout = component({
   input: z.object({ header: View, body: z.string(), userId: z.string() }),
   output: View,
   run: ({ header, body, userId }) => (
-    <div data-user={userId}>{header}<p>{body}</p></div>
+    <div data-user={userId}>
+      {header}
+      <p>{body}</p>
+    </div>
   ),
 });
 
@@ -206,8 +210,8 @@ const Page = compose({
 <Page userId="alice" />;
 ```
 
-This works because all three schemas define `userId` as `z.string()`. The
-value is provided once and passed to `Header`, `Body`, and `Layout`.
+This works because all three schemas define `userId` as `z.string()`. The value
+is provided once and passed to `Header`, `Body`, and `Layout`.
 
 If the overlapping key has **incompatible types** in `into` and `from`, graft
 throws at compose time:
@@ -230,8 +234,8 @@ compose({ into: B, from: A, key: "val" });
 ```
 
 Rename one of the keys to disambiguate.
-```
 
+````
 ### toReact converts to a regular React component
 
 Existing react apps can adopt gradually - `toReact` gives you a standard
@@ -244,7 +248,7 @@ const App = toReact(FormattedPrice);
 
 // TypeScript knows this needs { price: number }
 <App price={42000} />;
-```
+````
 
 ### fromReact wraps existing React components
 
@@ -260,7 +264,11 @@ const GraftDatePicker = fromReact(
 );
 
 // Now compose it like any other graft component
-const App = compose({ into: GraftDatePicker, from: SelectedDate, key: "selected" });
+const App = compose({
+  into: GraftDatePicker,
+  from: SelectedDate,
+  key: "selected",
+});
 ```
 
 ### emitters
@@ -367,8 +375,8 @@ Some computations need their previous result — accumulators, reducers, running
 totals. Instead of adding a new node type, graft expresses this as a feedback
 edge in the graph. Pass `future: true` to `compose`:
 
-`compose({ into, key, future: true, initial })` connects `into`'s output back
-to its own input named `key`, delayed by one step. The first invocation uses
+`compose({ into, key, future: true, initial })` connects `into`'s output back to
+its own input named `key`, delayed by one step. The first invocation uses
 `initial`. Each subsequent invocation uses the previous output. The `key` is
 removed from the composed component's schema — it's internally satisfied.
 
@@ -386,7 +394,12 @@ const Adder = component({
 });
 
 // Output feeds back to "acc", starting at 0
-const RunningTotal = compose({ into: Adder, key: "acc", future: true, initial: 0 });
+const RunningTotal = compose({
+  into: Adder,
+  key: "acc",
+  future: true,
+  initial: 0,
+});
 // RunningTotal input: { event: z.number() }, output: z.number()
 
 RunningTotal.run({ event: 5 }); // 5
@@ -439,10 +452,10 @@ subscription — each instance starts fresh from `initial`.
 
 A change in the feedback value alone never triggers a re-run. The feedback value
 is read passively at the start of each invocation — it doesn't act as a
-subscription source. Only upstream changes (new props or emitter emissions) cause
-re-runs. This means infinite loops are impossible by construction. The output of
-one run updates the accumulator, but that update is inert until the next external
-trigger arrives.
+subscription source. Only upstream changes (new props or emitter emissions)
+cause re-runs. This means infinite loops are impossible by construction. The
+output of one run updates the accumulator, but that update is inert until the
+next external trigger arrives.
 
 ## Full example
 
